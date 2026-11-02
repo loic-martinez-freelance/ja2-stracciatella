@@ -7,6 +7,8 @@
 #include "Font.h"
 #include "Font_Control.h"
 #include "Object_Cache.h"
+#include "HImage.h"
+#include "VObject.h"
 #include "Options_Screen.h"
 #include "GameSettings.h"
 #include "Input.h"
@@ -414,7 +416,10 @@ static void RenderGIOScreen(void)
 {
 	UINT16		usPosY;
 
-	BltVideoObject(FRAME_BUFFER, guiGIOMainBackGroundImage, 0, STD_SCREEN_X, STD_SCREEN_Y);
+	// Wildfire's background is 1024x768, keep it centered on the screen
+	SGPVObject const* const background = GetVObject(guiGIOMainBackGroundImage);
+	ETRLEObject const& bg = background->SubregionProperties(0);
+	BltVideoObject(FRAME_BUFFER, background, 0, (SCREEN_WIDTH - bg.usWidth) / 2, (SCREEN_HEIGHT - bg.usHeight) / 2);
 
 	//Shade the background
 	FRAME_BUFFER->ShadowRect(STD_SCREEN_X + 48, STD_SCREEN_Y + 55, STD_SCREEN_X + 592, STD_SCREEN_Y + 408); //358

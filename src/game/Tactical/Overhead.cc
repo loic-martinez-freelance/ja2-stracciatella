@@ -1,4 +1,5 @@
 #include "AI.h"
+#include "SaveLoadScreen.h"
 #include "Animation_Control.h"
 #include "Animation_Data.h"
 #include "Arms_Dealer_Init.h"
@@ -4007,6 +4008,8 @@ void EnterCombatMode( UINT8 ubStartingTeam )
 	SetEnemyPresence();
 
 	CommonEnterCombatModeCode( );
+
+	RequestAutoSave(AutoSaveReason::BATTLE_STARTED);
 
 	if (ubStartingTeam == OUR_TEAM)
 	{

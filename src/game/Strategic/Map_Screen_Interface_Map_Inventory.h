@@ -2,12 +2,15 @@
 #define _MAP_INTERFACE_MAP_INVEN_H
 
 #include "Types.h"
+#include "UILayout.h"
 #include "World_Items.h"
 
 #include <vector>
 
 // number of inventory slots
-#define MAP_INVENTORY_POOL_SLOT_COUNT 45
+// slots per page: 5x9 in the original layout, 5x10 in the Wildfire one
+#define MAP_INVENTORY_POOL_MAX_SLOT_COUNT 50
+#define MAP_INVENTORY_POOL_SLOT_COUNT MAP_LAYOUT(45, 50)
 
 // whether we are showing the inventory pool graphic
 extern BOOLEAN fShowMapInventoryPool;

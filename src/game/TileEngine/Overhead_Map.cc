@@ -383,7 +383,7 @@ void GoIntoOverheadMap( )
 {
 	gfInOverheadMap = TRUE;
 
-	MSYS_DefineRegion(&OverheadBackgroundRegion, STD_SCREEN_X, STD_SCREEN_Y, STD_SCREEN_X + 640, STD_SCREEN_Y + 360, MSYS_PRIORITY_HIGH, CURSOR_NORMAL, MSYS_NO_CALLBACK, MSYS_NO_CALLBACK);
+	MSYS_DefineRegion(&OverheadBackgroundRegion, OVERHEAD_FRAME_X, OVERHEAD_FRAME_Y, OVERHEAD_FRAME_X + OVERHEAD_FRAME_WIDTH, OVERHEAD_FRAME_Y + OVERHEAD_FRAME_HEIGHT,MSYS_PRIORITY_HIGH, CURSOR_NORMAL, MSYS_NO_CALLBACK, MSYS_NO_CALLBACK);
 
 	MSYS_DefineRegion(&OverheadRegion, STD_SCREEN_X, STD_SCREEN_Y, STD_SCREEN_X + 640, STD_SCREEN_Y + 320, MSYS_PRIORITY_HIGH, CURSOR_NORMAL, MSYS_NO_CALLBACK, MouseCallbackPrimarySecondary(ClickOverheadRegionCallbackPrimary, ClickOverheadRegionCallbackSecondary));
 
@@ -473,6 +473,10 @@ void RenderOverheadMap(INT16 const sStartPointX_M, INT16 const sStartPointY_M, I
 	if (!gfOverheadMapDirty) return;
 
 	// Black out
+	if (!fFromMapUtility && g_ui.m_wildfireTacticalPanels)
+	{ // Wildfire's frame window is larger than the map
+		ColorFillVideoSurfaceArea(FRAME_BUFFER, OVERHEAD_FRAME_X + 4, OVERHEAD_FRAME_Y + 4, OVERHEAD_FRAME_X + OVERHEAD_FRAME_WIDTH - 4, OVERHEAD_PANEL_Y, 0);
+	}
 	ColorFillVideoSurfaceArea(FRAME_BUFFER, sStartPointX_S, sStartPointY_S, sEndXS,	sEndYS, 0);
 
 	InvalidateScreen();
@@ -726,7 +730,7 @@ void RenderOverheadMap(INT16 const sStartPointX_M, INT16 const sStartPointY_M, I
 
 	if (!fFromMapUtility)
 	{ // Render border!
-		BltVideoObject(FRAME_BUFFER, uiOVERMAP, 0, STD_SCREEN_X + 0, STD_SCREEN_Y + 0);
+		BltVideoObject(FRAME_BUFFER, uiOVERMAP, 0, OVERHEAD_FRAME_X, OVERHEAD_FRAME_Y);
 	}
 
 	// Update the save buffer

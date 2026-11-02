@@ -8,6 +8,8 @@
 #include "Local.h"
 #include "MouseSystem.h"
 #include "Object_Cache.h"
+#include "HImage.h"
+#include "VObject.h"
 #include "Random.h"
 #include "Render_Dirty.h"
 #include "ScreenIDs.h"
@@ -132,6 +134,11 @@ static MOUSE_REGION gCrdtMouseRegions[NUM_PEOPLE_IN_CREDITS];
 
 static BOOLEAN g_credits_active;
 
+/* Wildfire's credits are one 1024x768 picture with the team photo and all the
+ * text in it. It is just shown, without scrolling text or animated faces. */
+static bool g_wildfire_credits;
+static bool g_leave_credits; // clicked to leave (Wildfire credits)
+
 namespace {
 cache_key_t const guiCreditBackGroundImage{ INTERFACEDIR "/credits.sti" };
 cache_key_t const guiCreditFaces{ INTERFACEDIR "/credit faces.sti" };
@@ -210,8 +217,18 @@ try
 
 	gCreditsStrings = std::make_optional(EDTFile::CREDITS);
 
-	MSYS_DefineRegion(&gCrdtBackgroundRegion, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, MSYS_PRIORITY_NORMAL, CURSOR_NORMAL, MSYS_NO_CALLBACK, MSYS_NO_CALLBACK);
-	for (INT32 i = 0; i != lengthof(gCrdtMouseRegions); ++i)
+	g_wildfire_credits = GetVObject(guiCreditBackGroundImage)->SubregionProperties(0).usWidth > 640;
+	g_leave_credits    = false;
+	if (g_wildfire_credits)
+	{ // leave with a click
+		MSYS_DefineRegion(&gCrdtBackgroundRegion, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, MSYS_PRIORITY_HIGHEST, CURSOR_NORMAL, MSYS_NO_CALLBACK,
+			[](MOUSE_REGION*, UINT32 reason) { if (reason & (MSYS_CALLBACK_REASON_POINTER_UP | MSYS_CALLBACK_REASON_RBUTTON_UP)) g_leave_credits = true; });
+	}
+	else
+	{
+		MSYS_DefineRegion(&gCrdtBackgroundRegion, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, MSYS_PRIORITY_NORMAL, CURSOR_NORMAL, MSYS_NO_CALLBACK, MSYS_NO_CALLBACK);
+	}
+	if (!g_wildfire_credits) for (INT32 i = 0; i != lengthof(gCrdtMouseRegions); ++i)
 	{
 		// Make a mouse region
 		MOUSE_REGION* const  r = &gCrdtMouseRegions[i];
@@ -252,7 +269,7 @@ static void ExitCreditScreen(void)
 	while (g_credits_head != NULL) DeleteFirstNode();
 
 	MSYS_RemoveRegion( &gCrdtBackgroundRegion );
-	for (size_t i = 0; i != lengthof(gCrdtMouseRegions); ++i)
+	if (!g_wildfire_credits) for (size_t i = 0; i != lengthof(gCrdtMouseRegions); ++i)
 	{
 		MSYS_RemoveRegion(&gCrdtMouseRegions[i]);
 	}
@@ -266,6 +283,8 @@ static void HandleCreditNodes(void);
 
 static void HandleCreditScreen(void)
 {
+	if (g_wildfire_credits) return; // the picture is all there is
+
 	HandleCreditNodes();
 	HandleCreditEyeBlinking();
 
@@ -292,13 +311,23 @@ static void HandleCreditScreen(void)
 
 static void RenderCreditScreen(void)
 {
-	BltVideoObject(FRAME_BUFFER, guiCreditBackGroundImage, 0, STD_SCREEN_X, STD_SCREEN_Y);
+	if (g_wildfire_credits)
+	{ // centered on the (at least 1024x768) screen
+		FRAME_BUFFER->Fill(0);
+		BltVideoObject(FRAME_BUFFER, guiCreditBackGroundImage, 0, (SCREEN_WIDTH - 1024) / 2, (SCREEN_HEIGHT - 768) / 2);
+	}
+	else
+	{
+		BltVideoObject(FRAME_BUFFER, guiCreditBackGroundImage, 0, STD_SCREEN_X, STD_SCREEN_Y);
+	}
 	InvalidateScreen();
 }
 
 
 static void GetCreditScreenUserInput(void)
 {
+	if (g_leave_credits) g_credits_active = FALSE;
+
 	InputAtom Event;
 	while (DequeueSpecificEvent(&Event, KEYBOARD_EVENTS))
 	{

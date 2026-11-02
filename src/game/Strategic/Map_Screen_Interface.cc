@@ -67,7 +67,7 @@
 // number of LINKED LISTS for sets of leave items (each slot holds an unlimited # of items)
 #define NUM_LEAVE_LIST_SLOTS 20
 
-#define SELECTED_CHAR_ARROW_X (STD_SCREEN_X + 8)
+#define SELECTED_CHAR_ARROW_X (MAP_ORIGIN_X + 8)
 
 #define SIZE_OF_UPDATE_BOX 20
 
@@ -2241,7 +2241,7 @@ static void AddStringsToMoveBox(PopUpBox*);
 
 static void CreatePopUpBoxForMovementBox(void)
 {
-	SGPPoint const MovePosition = { (UINT16)(STD_SCREEN_X + 450), (UINT16)(STD_SCREEN_Y + 100) };
+	SGPPoint const MovePosition = { (UINT16)(MAP_ORIGIN_X + 450), (UINT16)(MAP_ORIGIN_Y + 100) };
 
 	// create the pop up box and mouse regions for movement list
 	PopUpBox* const box = CreatePopUpBox(MovePosition, POPUP_BOX_FLAG_RESIZE, FRAME_BUFFER, guiPOPUPBORDERS, guiPOPUPTEX, 6, 6, 4, 4, 2);
@@ -3272,12 +3272,13 @@ void DisplaySoldierUpdateBox( )
 	iUpdatePanelHeight = ( iNumberHigh + 1 ) * TACT_HEIGHT_OF_UPDATE_PANEL_BLOCKS;
 
 	// get the x,y offsets on the screen of the panel
-	iX = STD_SCREEN_X + 290 + ( 336 - iUpdatePanelWidth ) / 2;
+	// centered on the map (sectors start one grid square right of the map view)
+	iX = MAP_VIEW_START_X + MAP_GRID_X - 1 + (MAP_VIEW_WIDTH - iUpdatePanelWidth) / 2;
 
 //	iY = 28 + ( 288 - iUpdatePanelHeight ) / 2;
 
 	// Have the bottom of the box ALWAYS a set distance from the bottom of the map ( so user doesnt have to move mouse far )
-	iY = STD_SCREEN_Y + 280 - iUpdatePanelHeight;
+	iY = MAP_ORIGIN_Y + MAP_LAYOUT(280, 590) - iUpdatePanelHeight;
 
 	const SGPVObject* const hBackGroundHandle = guiUpdatePanelTactical;
 

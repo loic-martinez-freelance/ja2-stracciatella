@@ -19,6 +19,7 @@
 #include <SDL3/SDL_surface.h>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <stdexcept>
 
 #define MAX_CURSOR_WIDTH  64
@@ -99,6 +100,47 @@ void VideoSetBrightness(float brightness)
 static void GetRGBDistribution();
 
 
+// area of the screen shown zoomed to fill the window, w == 0 if none
+static SGPBox g_zoomed_area{};
+
+// where the zoomed area ends up in render (logical) coordinates
+static SDL_FRect ZoomedAreaDestination()
+{
+	float const scale = std::min(float(SCREEN_WIDTH) / g_zoomed_area.w, float(SCREEN_HEIGHT) / g_zoomed_area.h);
+	float const w     = g_zoomed_area.w * scale;
+	float const h     = g_zoomed_area.h * scale;
+	return SDL_FRect{ (SCREEN_WIDTH - w) / 2, (SCREEN_HEIGHT - h) / 2, w, h };
+}
+
+
+void VideoSetZoomedArea(SGPBox const* const area)
+{
+	SGPBox const new_area = area ? *area : SGPBox{};
+	if (new_area.x == g_zoomed_area.x && new_area.y == g_zoomed_area.y &&
+		new_area.w == g_zoomed_area.w && new_area.h == g_zoomed_area.h) return;
+	g_zoomed_area = new_area;
+	InvalidateScreen();
+}
+
+
+void VideoRenderToGameCoordinates(float& x, float& y)
+{
+	if (g_zoomed_area.w == 0) return;
+	SDL_FRect const dst = ZoomedAreaDestination();
+	x = g_zoomed_area.x + (x - dst.x) * g_zoomed_area.w / dst.w;
+	y = g_zoomed_area.y + (y - dst.y) * g_zoomed_area.h / dst.h;
+}
+
+
+void VideoGameToRenderCoordinates(float& x, float& y)
+{
+	if (g_zoomed_area.w == 0) return;
+	SDL_FRect const dst = ZoomedAreaDestination();
+	x = dst.x + (x - g_zoomed_area.x) * dst.w / g_zoomed_area.w;
+	y = dst.y + (y - g_zoomed_area.y) * dst.h / g_zoomed_area.h;
+}
+
+
 void InitializeVideoManager(const VideoScaleQuality quality, const int32_t targetFPS)
 {
 	ScaleQuality = quality;
@@ -107,6 +149,26 @@ void InitializeVideoManager(const VideoScaleQuality quality, const int32_t targe
 	g_game_window = SDL_CreateWindow(APPLICATION_NAME,
 					SCREEN_WIDTH, SCREEN_HEIGHT,
 					g_window_flags);
+
+	if (!(g_window_flags & SDL_WINDOW_FULLSCREEN))
+	{
+		// A window of SCREEN_WIDTH x SCREEN_HEIGHT points is tiny on modern
+		// (high DPI) displays. Open it as large as the usable desktop area
+		// allows instead, keeping the aspect ratio. Pixel perfect scaling
+		// only supports integer factors, so round down to one in that case.
+		SDL_Rect usable;
+		if (SDL_GetDisplayUsableBounds(SDL_GetDisplayForWindow(g_game_window), &usable))
+		{
+			// leave room for the window decorations
+			float const fit = std::min(usable.w * 0.95f / SCREEN_WIDTH, usable.h * 0.90f / SCREEN_HEIGHT);
+			float const factor = quality == VideoScaleQuality::PERFECT ? std::floor(fit) : fit;
+			if (factor > 1.0f)
+			{
+				SDL_SetWindowSize(g_game_window, int(SCREEN_WIDTH * factor), int(SCREEN_HEIGHT * factor));
+				SDL_SetWindowPosition(g_game_window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+			}
+		}
+	}
 
 	GameRenderer = SDL_CreateRenderer(g_game_window, nullptr);
 	SDL_SetRenderLogicalPresentation(GameRenderer, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_LOGICAL_PRESENTATION_LETTERBOX);
@@ -526,15 +588,37 @@ void RefreshScreen(void)
 
 	SDL_RenderClear(GameRenderer);
 
+	// optionally only show a part of the screen, scaled up
+	SDL_FRect zoom_src;
+	SDL_FRect zoom_dst;
+	SDL_FRect const* zsrc = nullptr;
+	SDL_FRect const* zdst = nullptr;
+	if (g_zoomed_area.w != 0)
+	{
+		zoom_dst = ZoomedAreaDestination();
+		zdst     = &zoom_dst;
+	}
+
 	if (ScaleQuality == VideoScaleQuality::NEAR_PERFECT) {
 		SDL_SetRenderTarget(GameRenderer, ScaledScreenTexture);
 		SDL_RenderTexture(GameRenderer, ScreenTexture, nullptr, nullptr);
 
 		SDL_SetRenderTarget(GameRenderer, nullptr);
-		SDL_RenderTexture(GameRenderer, ScaledScreenTexture, nullptr, nullptr);
+		if (zdst)
+		{ // the scaled texture is OVERSAMPLING_SCALE times the screen size
+			zoom_src = SDL_FRect{ float(g_zoomed_area.x * OVERSAMPLING_SCALE), float(g_zoomed_area.y * OVERSAMPLING_SCALE),
+				float(g_zoomed_area.w * OVERSAMPLING_SCALE), float(g_zoomed_area.h * OVERSAMPLING_SCALE) };
+			zsrc = &zoom_src;
+		}
+		SDL_RenderTexture(GameRenderer, ScaledScreenTexture, zsrc, zdst);
 	}
 	else {
-		SDL_RenderTexture(GameRenderer, ScreenTexture, NULL, NULL);
+		if (zdst)
+		{
+			zoom_src = SDL_FRect{ float(g_zoomed_area.x), float(g_zoomed_area.y), float(g_zoomed_area.w), float(g_zoomed_area.h) };
+			zsrc = &zoom_src;
+		}
+		SDL_RenderTexture(GameRenderer, ScreenTexture, zsrc, zdst);
 	}
 
 	Visualizer::Render(GameRenderer);

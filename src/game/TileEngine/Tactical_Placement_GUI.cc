@@ -75,6 +75,12 @@ BOOLEAN gfTacticalPlacementFirstTime = FALSE;
 BOOLEAN gfEnterTacticalPlacementGUI = FALSE;
 BOOLEAN gfKillTacticalGUI = FALSE;
 static SGPVObject* giOverheadPanelImage;
+
+/* The panel below the overhead map. Wildfire's graphic is the original layout,
+ * only 1024 instead of 640 pixels wide, so it is aligned to the 1024 area. */
+#define PANEL_X     TAC_LAYOUT(STD_SCREEN_X, (SCREEN_WIDTH - 1024) / 2)
+#define PANEL_WIDTH TAC_LAYOUT(640, 1024)
+#define PANEL_Y     OVERHEAD_PANEL_Y
 static BUTTON_PICS* giOverheadButtonImages[NUM_TP_BUTTONS];
 SGPVObject* giMercPanelImage = 0;
 BOOLEAN gfTacticalPlacementGUIDirty = FALSE;
@@ -99,7 +105,7 @@ static bool gfWest;
 
 static void MakeButton(UINT idx, INT16 y, GUI_CALLBACK click, const ST::string& text, const ST::string& help)
 {
-	GUIButtonRef const btn = QuickCreateButton(giOverheadButtonImages[idx], STD_SCREEN_X + 11, STD_SCREEN_Y + y, MSYS_PRIORITY_HIGH, click);
+	GUIButtonRef const btn = QuickCreateButton(giOverheadButtonImages[idx], PANEL_X + 11, PANEL_Y + y, MSYS_PRIORITY_HIGH, click);
 	iTPButtons[idx] = btn;
 	btn->SpecifyGeneralTextAttributes(text, BLOCKFONT, FONT_BEIGE, 141);
 	btn->SetFastHelpText(help);
@@ -136,10 +142,10 @@ void InitTacticalPlacementGUI()
 	giOverheadButtonImages[CLEAR_BUTTON]  = UseLoadedButtonImage(img, 0, 1);
 
 	// Create the buttons which provide automatic placements.
-	MakeButton(CLEAR_BUTTON,  332, ClearPlacementsCallback,            gpStrategicString[STR_TP_CLEAR],  gpStrategicString[STR_TP_CLEARHELP]);
-	MakeButton(SPREAD_BUTTON, 367, SpreadPlacementsCallback,           gpStrategicString[STR_TP_SPREAD], gpStrategicString[STR_TP_SPREADHELP]);
-	MakeButton(GROUP_BUTTON,  402, GroupPlacementsCallback,            gpStrategicString[STR_TP_GROUP],  gpStrategicString[STR_TP_GROUPHELP]);
-	MakeButton(DONE_BUTTON,   437, DoneOverheadPlacementClickCallback, gpStrategicString[STR_TP_DONE],   gpStrategicString[STR_TP_DONEHELP]);
+	MakeButton(CLEAR_BUTTON,   12, ClearPlacementsCallback,            gpStrategicString[STR_TP_CLEAR],  gpStrategicString[STR_TP_CLEARHELP]);
+	MakeButton(SPREAD_BUTTON,  47, SpreadPlacementsCallback,           gpStrategicString[STR_TP_SPREAD], gpStrategicString[STR_TP_SPREADHELP]);
+	MakeButton(GROUP_BUTTON,   82, GroupPlacementsCallback,            gpStrategicString[STR_TP_GROUP],  gpStrategicString[STR_TP_GROUPHELP]);
+	MakeButton(DONE_BUTTON,   117, DoneOverheadPlacementClickCallback, gpStrategicString[STR_TP_DONE],   gpStrategicString[STR_TP_DONEHELP]);
 	iTPButtons[DONE_BUTTON]->AllowDisabledFastHelp();
 
 	GROUP const& bg = *gpBattleGroup;
@@ -187,8 +193,8 @@ void InitTacticalPlacementGUI()
 		m.ubStrategicInsertionCode = s->ubStrategicInsertionCode;
 		m.fPlaced                  = FALSE;
 		m.uiVObjectID              = Load65Portrait(GetProfile(m.pSoldier->ubProfile));
-		INT32 const x = STD_SCREEN_X +  91 + i / 2 * 54;
-		INT32 const y = STD_SCREEN_Y + 361 + i % 2 * 51;
+		INT32 const x = PANEL_X +  91 + i / 2 * 54;
+		INT32 const y = PANEL_Y +  41 + i % 2 * 51;
 		MSYS_DefineRegion(&m.region, x, y, x + 54, y + 62, MSYS_PRIORITY_HIGH, 0, MercMoveCallback, MercClickCallback);
 
 		switch (s->ubStrategicInsertionCode)
@@ -240,8 +246,8 @@ static void RenderTacticalPlacementGUI()
 	 * refresh the display. */
 	if (!gfTacticalPlacementGUIDirty && gbHilightedMercID != -1)
 	{
-		INT32 const x = STD_SCREEN_X +  91 + gbHilightedMercID / 2 * 54;
-		INT32 const y = STD_SCREEN_Y + 361 + gbHilightedMercID % 2 * 51;
+		INT32 const x = PANEL_X +  91 + gbHilightedMercID / 2 * 54;
+		INT32 const y = PANEL_Y +  41 + gbHilightedMercID % 2 * 51;
 		if (gusMouseXPos < x || x + 54 < gusMouseXPos ||
 				gusMouseYPos < y || y + 62 < gusMouseYPos)
 		{
@@ -256,15 +262,15 @@ static void RenderTacticalPlacementGUI()
 	// If the display is dirty render the entire panel.
 	if (gfTacticalPlacementGUIDirty)
 	{
-		BltVideoObject(buf, giOverheadPanelImage, 0, STD_SCREEN_X + 0, STD_SCREEN_Y + 320);
-		InvalidateRegion(STD_SCREEN_X + 0, STD_SCREEN_Y + 0, STD_SCREEN_X + 320, STD_SCREEN_Y + 480);
+		BltVideoObject(buf, giOverheadPanelImage, 0, PANEL_X, PANEL_Y);
+		InvalidateRegion(PANEL_X, PANEL_Y, PANEL_X + PANEL_WIDTH, PANEL_Y + 160);
 		gfTacticalPlacementGUIDirty = FALSE;
 		MarkButtonsDirty();
 		for (INT32 i = 0; i != giPlacements; ++i)
 		{ // Render the mercs
 			MERCPLACEMENT const& m = gMercPlacement[i];
-			INT32         const  x = STD_SCREEN_X +  95 + i / 2 * 54;
-			INT32         const  y = STD_SCREEN_Y + 371 + i % 2 * 51;
+			INT32         const  x = PANEL_X +  95 + i / 2 * 54;
+			INT32         const  y = PANEL_Y +  51 + i % 2 * 51;
 			ColorFillVideoSurfaceArea(buf, x + 36, y + 2, x + 44, y + 30, 0);
 			BltVideoObject(buf, giMercPanelImage, 0, x,     y);
 			BltVideoObject(buf, m.uiVObjectID,    0, x + 2, y + 2);
@@ -281,10 +287,10 @@ static void RenderTacticalPlacementGUI()
 
 		SetFontAttributes(BLOCKFONT, FONT_BEIGE);
 		ST::string str = GetSectorIDString(gubPBSector, TRUE);
-		MPrint(STD_SCREEN_X + 120, STD_SCREEN_Y + 335, ST::format("{} {} -- {}...", gpStrategicString[STR_TP_SECTOR], str, gpStrategicString[STR_TP_CHOOSEENTRYPOSITIONS]));
+		MPrint(PANEL_X + 120, PANEL_Y + 15, ST::format("{} {} -- {}...", gpStrategicString[STR_TP_SECTOR], str, gpStrategicString[STR_TP_CHOOSEENTRYPOSITIONS]));
 
 		// Shade out the part of the tactical map that isn't considered placable.
-		BlitBufferToBuffer(buf, guiSAVEBUFFER, STD_SCREEN_X + 0, STD_SCREEN_Y + 320, 640, 160);
+		BlitBufferToBuffer(buf, guiSAVEBUFFER, PANEL_X, PANEL_Y, PANEL_WIDTH, 160);
 	}
 
 	if (gfValidLocationsChanged)
@@ -325,8 +331,8 @@ static void RenderTacticalPlacementGUI()
 	bool const is_group = gubDefaultButton == GROUP_BUTTON;
 	for (INT32 i = 0; i != giPlacements; ++i)
 	{ // Render the merc's names
-		INT32 const x = STD_SCREEN_X +  95 + i / 2 * 54;
-		INT32 const y = STD_SCREEN_Y + 371 + i % 2 * 51;
+		INT32 const x = PANEL_X +  95 + i / 2 * 54;
+		INT32 const y = PANEL_Y +  51 + i % 2 * 51;
 
 		MERCPLACEMENT const& m     = gMercPlacement[i];
 		SOLDIERTYPE   const& s     = *m.pSoldier;

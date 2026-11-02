@@ -85,14 +85,16 @@
 // #define VERT_SCROLL 10
 
 // the pop up for helicopter stuff
-#define MAP_HELICOPTER_ETA_POPUP_X (STD_SCREEN_X + 400)
-#define MAP_HELICOPTER_ETA_POPUP_Y (STD_SCREEN_Y + 250)
-#define MAP_HELICOPTER_UPPER_ETA_POPUP_Y (STD_SCREEN_Y + 50)
+// near the bottom of the map, or near the top when the cursor is down there
+#define MAP_HELICOPTER_ETA_POPUP_X (MAP_ORIGIN_X + MAP_LAYOUT(400, 590))
+#define MAP_HELICOPTER_ETA_POPUP_Y (MAP_ORIGIN_Y + MAP_LAYOUT(250, 540))
+#define MAP_HELICOPTER_UPPER_ETA_POPUP_Y (MAP_ORIGIN_Y + MAP_LAYOUT(50, 70))
 #define MAP_HELICOPTER_ETA_POPUP_WIDTH 120
 #define MAP_HELICOPTER_ETA_POPUP_HEIGHT 68
 
-#define MAP_LEVEL_STRING_X (STD_SCREEN_X + 432)
-#define MAP_LEVEL_STRING_Y (STD_SCREEN_Y + 305)
+// bottom middle of the map
+#define MAP_LEVEL_STRING_X (MAP_ORIGIN_X + MAP_LAYOUT(432, 627))
+#define MAP_LEVEL_STRING_Y (MAP_ORIGIN_Y + MAP_LAYOUT(305, 598))
 
 // font
 #define MAP_FONT BLOCKFONT2
@@ -120,8 +122,10 @@
 #define MERC_ICONS_PER_LINE 6
 #define ROWS_PER_SECTOR     5
 
-#define MAP_X_ICON_OFFSET   2
-#define MAP_Y_ICON_OFFSET   1
+#define MAP_X_ICON_OFFSET   MAP_LAYOUT(2, 4)
+#define MAP_Y_ICON_OFFSET   MAP_LAYOUT(1, 3)
+// distance between the small icons in a sector
+#define MAP_ICON_SPACING    MAP_LAYOUT(3, 6)
 
 // Arrow Offsets
 #define UP_X                13
@@ -229,8 +233,9 @@ static SGPVSurface* guiBIGMAP;
 #define MILITIA_BOX_ROWS 3
 #define MILITIA_BOX_BOX_HEIGHT 36
 #define MILITIA_BOX_BOX_WIDTH 42
-#define MAP_MILITIA_BOX_POS_X (STD_SCREEN_X + 400)
-#define MAP_MILITIA_BOX_POS_Y (STD_SCREEN_Y + 125)
+// over the middle of the map
+#define MAP_MILITIA_BOX_POS_X (MAP_ORIGIN_X + MAP_LAYOUT(400, 590))
+#define MAP_MILITIA_BOX_POS_Y (MAP_ORIGIN_Y + MAP_LAYOUT(125, 245))
 
 #define POPUP_MILITIA_ICONS_PER_ROW 5 // max 6 rows gives the limit of 30 militia
 #define MEDIUM_MILITIA_ICON_SPACING 5
@@ -404,19 +409,22 @@ void InitMapScreenInterfaceMap()
 void DrawMapIndexBigMap(BOOLEAN fSelectedCursorIsYellow)
 {
 	// x start of hort index
-	int const MAP_HORT_INDEX_X = (STD_SCREEN_X + 292);
+	int const MAP_HORT_INDEX_X = MAP_VIEW_START_X + MAP_GRID_X + 1;
 
-	// y position of hort index
-	int const MAP_HORT_INDEX_Y = (STD_SCREEN_Y + 10);
+	// y position of hort index (Wildfire: the dark strip at the top of the border)
+	int const MAP_HORT_INDEX_Y = MAP_ORIGIN_Y + MAP_LAYOUT(10, 9);
 
 	// height of hort index
-	int const MAP_HORT_HEIGHT = GetFontHeight(MAP_FONT);
+	int const MAP_HORT_HEIGHT = MAP_LAYOUT(GetFontHeight(MAP_FONT), 26);
 
-	// vert index start x
-	int const MAP_VERT_INDEX_X = (STD_SCREEN_X + 273);
+	// vert index start x (Wildfire: the dark strip at the left of the border)
+	int const MAP_VERT_INDEX_X = MAP_ORIGIN_X + MAP_LAYOUT(273, 261 + 21);
+
+	// width of vert index
+	int const MAP_VERT_WIDTH = MAP_LAYOUT(GetFontHeight(MAP_FONT), 23);
 
 	// vert index start y
-	int const MAP_VERT_INDEX_Y = (STD_SCREEN_Y + 31);
+	int const MAP_VERT_INDEX_Y = MAP_VIEW_START_Y + MAP_GRID_Y + MAP_LAYOUT(3, 0);
 
 	// this procedure will draw the coord indexes on the zoomed out map
 	SetFontDestBuffer(FRAME_BUFFER);
@@ -427,7 +435,7 @@ void DrawMapIndexBigMap(BOOLEAN fSelectedCursorIsYellow)
 	bool  const sel_candidate = bSelectedDestChar == -1 && !fPlotForHelicopter;
 	UINT8 const sel_colour    = fSelectedCursorIsYellow ? FONT_YELLOW : FONT_WHITE;
 	HCenterVCenterAlign const hortIndexAlign{ MAP_GRID_X, MAP_HORT_HEIGHT };
-	HCenterVCenterAlign const vertIndexAlign{ MAP_HORT_HEIGHT, MAP_GRID_Y };
+	HCenterVCenterAlign const vertIndexAlign{ MAP_VERT_WIDTH, MAP_GRID_Y };
 
 	for (INT32 i = 1; i <= MAX_VIEW_SECTORS; ++i)
 	{
@@ -448,7 +456,7 @@ void DrawMapIndexBigMap(BOOLEAN fSelectedCursorIsYellow)
 		MPrint(MAP_VERT_INDEX_X, MAP_VERT_INDEX_Y + (i - 1) * MAP_GRID_Y, pMapVertIndex[i], vertIndexAlign);
 	}
 
-	InvalidateRegion(MAP_VERT_INDEX_X, MAP_VERT_INDEX_Y, MAP_VERT_INDEX_X + MAP_HORT_HEIGHT,               MAP_VERT_INDEX_Y + MAX_VIEW_SECTORS * MAP_GRID_Y);
+	InvalidateRegion(MAP_VERT_INDEX_X, MAP_VERT_INDEX_Y, MAP_VERT_INDEX_X + MAP_VERT_WIDTH,               MAP_VERT_INDEX_Y + MAX_VIEW_SECTORS * MAP_GRID_Y);
 	InvalidateRegion(MAP_HORT_INDEX_X, MAP_HORT_INDEX_Y, MAP_HORT_INDEX_X + MAX_VIEW_SECTORS * MAP_GRID_X, MAP_HORT_INDEX_Y + MAP_HORT_HEIGHT);
 }
 
@@ -488,7 +496,14 @@ void DrawMap(void)
 {
 	if (!iCurrentMapSectorZ)
 	{
-		BltVideoSurfaceHalf(guiSAVEBUFFER, guiBIGMAP, MAP_VIEW_START_X + 1, MAP_VIEW_START_Y, NULL);
+		if (g_ui.m_wildfireMapScreen)
+		{ // Wildfire's map image has the size it is shown with
+			BltVideoSurfacePalettized(guiSAVEBUFFER, guiBIGMAP, MAP_VIEW_START_X + 1, MAP_VIEW_START_Y, NULL);
+		}
+		else
+		{
+			BltVideoSurfaceHalf(guiSAVEBUFFER, guiBIGMAP, MAP_VIEW_START_X + 1, MAP_VIEW_START_Y, NULL);
+		}
 
 		// shade map sectors (must be done after Tixa/Orta/Mine icons have been blitted, but before icons!)
 		SGPSector sSector(1, 1, iCurrentMapSectorZ);
@@ -645,7 +660,7 @@ static void ShowTownText(void)
 			INT16 loyalty_x = x - StringPixLength(loyalty_str, MAP_FONT) / 2;
 
 			// make sure we don't go past left edge (Grumm)
-			INT16 const min_x = MAP_VIEW_START_X + 23;
+			INT16 const min_x = MAP_VIEW_START_X + MAP_GRID_X + 2;
 			if (loyalty_x < min_x) loyalty_x = min_x;
 
 			GDirtyPrint(loyalty_x, y + GetFontHeight(MAP_FONT), loyalty_str);
@@ -781,12 +796,14 @@ static void ShadeMapElem(const SGPSector& sMap, const INT32 iColor)
 	// compensate for original BIG_MAP blit being done at MAP_VIEW_START_X + 1
 	sScreenX += 1;
 
+	// the original map image is twice the size it is shown with
+	UINT16 const scale = MAP_LAYOUT(2, 1);
 	SGPBox const clip =
 	{
-		(UINT16)(2 * (sScreenX - (MAP_VIEW_START_X + 1))),
-		(UINT16)(2 * (sScreenY - MAP_VIEW_START_Y)),
-		2 * MAP_GRID_X,
-		2 * MAP_GRID_Y
+		(UINT16)(scale * (sScreenX - (MAP_VIEW_START_X + 1))),
+		(UINT16)(scale * (sScreenY - MAP_VIEW_START_Y)),
+		(UINT16)(scale * MAP_GRID_X),
+		(UINT16)(scale * MAP_GRID_Y)
 	};
 
 	// non-airspace
@@ -813,7 +830,14 @@ static void ShadeMapElem(const SGPSector& sMap, const INT32 iColor)
 
 	UINT16* const org_pal = map->p16BPPPalette;
 	map->p16BPPPalette = pal;
-	BltVideoSurfaceHalf(guiSAVEBUFFER, guiBIGMAP, sScreenX, sScreenY, &clip);
+	if (g_ui.m_wildfireMapScreen)
+	{
+		BltVideoSurfacePalettized(guiSAVEBUFFER, guiBIGMAP, sScreenX, sScreenY, &clip);
+	}
+	else
+	{
+		BltVideoSurfaceHalf(guiSAVEBUFFER, guiBIGMAP, sScreenX, sScreenY, &clip);
+	}
 	map->p16BPPPalette = org_pal;
 }
 
@@ -1997,18 +2021,19 @@ void RestoreClipRegionToFullScreenForRectangle( UINT32 uiDestPitchBYTES )
 
 
 // mvt icon offset defines
-#define SOUTH_Y_MVT_OFFSET +10
-#define SOUTH_X_MVT_OFFSET 0
+// the arrows straddle the sector edges (Wildfire: sectors of 42x36 pixels)
+#define SOUTH_Y_MVT_OFFSET MAP_LAYOUT(+10, +28)
+#define SOUTH_X_MVT_OFFSET MAP_LAYOUT(0, +12)
 #define NORTH_Y_MVT_OFFSET -10
-#define NORTH_X_MVT_OFFSET  +10
-#define NORTH_SOUTH_CENTER_OFFSET +5
+#define NORTH_X_MVT_OFFSET MAP_LAYOUT(+10, +22)
+#define NORTH_SOUTH_CENTER_OFFSET MAP_LAYOUT(+5, +17)
 
 
-#define EAST_Y_MVT_OFFSET + 8
-#define EAST_X_MVT_OFFSET 15
-#define WEST_Y_MVT_OFFSET -2
+#define EAST_Y_MVT_OFFSET MAP_LAYOUT(+8, +18)
+#define EAST_X_MVT_OFFSET MAP_LAYOUT(15, 36)
+#define WEST_Y_MVT_OFFSET MAP_LAYOUT(-2, +8)
 #define WEST_X_MVT_OFFSET -8
-#define EAST_WEST_CENTER_OFFSET +2
+#define EAST_WEST_CENTER_OFFSET MAP_LAYOUT(+2, +13)
 
 #define NORTH_TEXT_X_OFFSET +1
 #define NORTH_TEXT_Y_OFFSET +4
@@ -2447,7 +2472,7 @@ static void BlitMineIcon(const SGPSector& sMap)
 static void PrintStringCenteredBoxed(INT32 x, INT32 y, const ST::string& string)
 {
 	x -= StringPixLength(string, MAP_FONT) / 2;
-	if (x < MAP_VIEW_START_X + 23) x = MAP_VIEW_START_X + 23;
+	if (x < MAP_VIEW_START_X + MAP_GRID_X + 2) x = MAP_VIEW_START_X + MAP_GRID_X + 2;
 
 	MPrint(x, y, string);
 }
@@ -2669,7 +2694,16 @@ static void DropAPersonInASector(UINT8 const type, UINT8 const sector)
 
 void LoadMapScreenInterfaceMapGraphics()
 {
-	guiBIGMAP                      = AddVideoSurfaceFromFile(INTERFACEDIR "/b_map.pcx");
+	if (GCM->doesGameResExists(INTERFACEDIR "/b_map.pcx"))
+	{
+		guiBIGMAP = AddVideoSurfaceFromFile(INTERFACEDIR "/b_map.pcx");
+	}
+	else
+	{
+		// Wildfire ships the map as a 16 bpp STI instead of a palettized PCX.
+		// The map is shaded via its palette, so reduce it to 256 colours.
+		guiBIGMAP = AddVideoSurfaceFromFileAs8BPP(INTERFACEDIR "/b_map.sti", 1);
+	}
 
 	for (auto s : GCM->getMapSecrets())
 	{
@@ -3465,7 +3499,8 @@ static void HandleLowerLevelMapBlit(void)
 	}
 
 	// handle the blt of the sublevel
-	BltVideoObject(guiSAVEBUFFER, vo, 0, MAP_VIEW_START_X + 21, MAP_VIEW_START_Y + 17);
+	// the image starts at the grid line left of / above sector (1, 1)
+	BltVideoObject(guiSAVEBUFFER, vo, 0, MAP_VIEW_START_X + MAP_LAYOUT(21, 41), MAP_VIEW_START_Y + MAP_LAYOUT(17, 34));
 
 	// handle shading of sublevels
 	ShadeSubLevelsNotVisited( );
@@ -3773,8 +3808,8 @@ static void DrawMapBoxIcon(cache_key_t const vo, UINT16 const icon, const SGPSec
 	INT32 const col = icon_pos % MERC_ICONS_PER_LINE;
 	INT32 const row = icon_pos / MERC_ICONS_PER_LINE;
 
-	INT32 const x = MAP_VIEW_START_X + sMap.x * MAP_GRID_X + MAP_X_ICON_OFFSET + 3 * col;
-	INT32 const y = MAP_VIEW_START_Y + sMap.y * MAP_GRID_Y + MAP_Y_ICON_OFFSET + 3 * row;
+	INT32 const x = MAP_VIEW_START_X + sMap.x * MAP_GRID_X + MAP_X_ICON_OFFSET + MAP_ICON_SPACING * col;
+	INT32 const y = MAP_VIEW_START_Y + sMap.y * MAP_GRID_Y + MAP_Y_ICON_OFFSET + MAP_ICON_SPACING * row;
 	BltVideoObject(guiSAVEBUFFER, vo, icon, x, y);
 	InvalidateRegion(x, y, x + DMAP_GRID_X, y + DMAP_GRID_Y);
 }

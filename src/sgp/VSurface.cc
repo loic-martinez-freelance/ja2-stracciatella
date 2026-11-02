@@ -3,12 +3,15 @@
 #include "Shading.h"
 #include "VObject_Blitters.h"
 #include "VSurface.h"
+#include "UILayout.h"
 
 #include "SDL3/SDL.h"
 #include <string_theory/format>
 #include <string_theory/string>
 
+#include <algorithm>
 #include <stdexcept>
+#include <vector>
 
 extern SGPVSurface* gpVSurfaceHead;
 
@@ -175,6 +178,204 @@ SGPVSurface* AddVideoSurfaceFromFile(const char* const Filename)
 	return vs.release();
 }
 
+
+namespace {
+
+// One box of the median cut colour quantizer: a range of unique colours
+struct ColorBox
+{
+	size_t begin, end;
+	UINT8  minC[3], maxC[3];
+
+	int LongestAxis() const
+	{
+		int axis = 0;
+		for (int c = 1; c < 3; ++c)
+		{
+			if (maxC[c] - minC[c] > maxC[axis] - minC[axis]) axis = c;
+		}
+		return axis;
+	}
+
+	int Range() const
+	{
+		int const a = LongestAxis();
+		return maxC[a] - minC[a];
+	}
+};
+
+struct WeightedColor
+{
+	UINT8  c[3];
+	UINT32 count;
+	UINT16 value; // original 16 bpp colour
+};
+
+void ShrinkBox(ColorBox& box, std::vector<WeightedColor> const& colors)
+{
+	for (int c = 0; c < 3; ++c) { box.minC[c] = 255; box.maxC[c] = 0; }
+	for (size_t i = box.begin; i != box.end; ++i)
+	{
+		for (int c = 0; c < 3; ++c)
+		{
+			box.minC[c] = std::min(box.minC[c], colors[i].c[c]);
+			box.maxC[c] = std::max(box.maxC[c], colors[i].c[c]);
+		}
+	}
+}
+
+} // namespace
+
+
+SGPVSurface* AddVideoSurfaceFromFileAs8BPP(const char* const Filename, UINT8 const scale)
+{
+	AutoSGPImage img(CreateImage(Filename, IMAGE_ALLIMAGEDATA));
+	if (img->ubBitDepth == 8 && scale == 1)
+	{
+		// Nothing to convert, use the regular code path
+		return AddVideoSurfaceFromFile(Filename);
+	}
+	if (img->ubBitDepth != 16 || scale == 0)
+	{
+		throw std::runtime_error(ST::format("{}: cannot convert {} bpp image to 8 bpp", Filename, img->ubBitDepth).to_std_string());
+	}
+
+	UINT16 const  w   = img->usWidth;
+	UINT16 const  h   = img->usHeight;
+	UINT16 const* src = reinterpret_cast<UINT16 const*>(&*img->pImageData);
+
+	// Histogram of all RGB565 colours used by the image
+	std::vector<UINT32> histogram(65536, 0);
+	for (size_t i = 0; i != size_t(w) * h; ++i) ++histogram[src[i]];
+
+	std::vector<WeightedColor> colors;
+	for (UINT32 v = 0; v != histogram.size(); ++v)
+	{
+		if (histogram[v] == 0) continue;
+		UINT32 const rgb = GetRGBColor(UINT16(v));
+		colors.push_back({ { SGPGetRValue(rgb), SGPGetGValue(rgb), SGPGetBValue(rgb) }, histogram[v], UINT16(v) });
+	}
+
+	// Median cut: repeatedly split the box with the largest colour range
+	std::vector<ColorBox> boxes;
+	boxes.push_back({ 0, colors.size(), {}, {} });
+	ShrinkBox(boxes[0], colors);
+	while (boxes.size() < 256)
+	{
+		size_t best = boxes.size();
+		for (size_t i = 0; i != boxes.size(); ++i)
+		{
+			if (boxes[i].end - boxes[i].begin < 2) continue;
+			if (best == boxes.size() || boxes[i].Range() > boxes[best].Range()) best = i;
+		}
+		if (best == boxes.size()) break; // every box holds a single colour
+
+		ColorBox& box = boxes[best];
+		int const axis = box.LongestAxis();
+		std::sort(colors.begin() + box.begin, colors.begin() + box.end,
+			[axis](WeightedColor const& a, WeightedColor const& b) { return a.c[axis] < b.c[axis]; });
+
+		// Split at the weighted median
+		uint64_t total = 0;
+		for (size_t i = box.begin; i != box.end; ++i) total += colors[i].count;
+		uint64_t acc = 0;
+		size_t split = box.begin + 1;
+		for (size_t i = box.begin; i != box.end - 1; ++i)
+		{
+			acc += colors[i].count;
+			split = i + 1;
+			if (acc * 2 >= total) break;
+		}
+
+		ColorBox upper{ split, box.end, {}, {} };
+		box.end = split;
+		ShrinkBox(box, colors);
+		ShrinkBox(upper, colors);
+		boxes.push_back(upper);
+	}
+
+	// Palette entry of every box is its weighted average colour
+	SGPPaletteEntry palette[256]{};
+	std::vector<UINT8> lookup(65536, 0);
+	for (size_t b = 0; b != boxes.size(); ++b)
+	{
+		uint64_t sum[3]{};
+		uint64_t weight = 0;
+		for (size_t i = boxes[b].begin; i != boxes[b].end; ++i)
+		{
+			for (int c = 0; c < 3; ++c) sum[c] += uint64_t(colors[i].c[c]) * colors[i].count;
+			weight += colors[i].count;
+		}
+		palette[b].r = UINT8(sum[0] / weight);
+		palette[b].g = UINT8(sum[1] / weight);
+		palette[b].b = UINT8(sum[2] / weight);
+		palette[b].a = 255;
+
+		for (size_t i = boxes[b].begin; i != boxes[b].end; ++i)
+		{
+			lookup[colors[i].value] = UINT8(b);
+		}
+	}
+
+	auto vs = std::make_unique<SGPVSurface>(UINT16(w * scale), UINT16(h * scale), 8);
+	vs->SetPalette(palette);
+	{
+		SGPVSurface::Lock l(vs.get());
+		UINT8* const dst   = l.Buffer<UINT8>();
+		UINT32 const pitch = l.Pitch();
+		for (UINT32 y = 0; y != UINT32(h) * scale; ++y)
+		{
+			UINT16 const* const srcRow = src + (y / scale) * w;
+			UINT8*        const dstRow = dst + y * pitch;
+			for (UINT32 x = 0; x != UINT32(w) * scale; ++x)
+			{
+				dstRow[x] = lookup[srcRow[x / scale]];
+			}
+		}
+	}
+
+	return vs.release();
+}
+
+
+void BltVideoSurfacePalettized(SGPVSurface* const dst, SGPVSurface* const src, INT32 const DestX, INT32 const DestY, SGPBox const* const src_rect)
+{
+	Assert(src->BPP() == 8);
+	Assert(dst->BPP() == 16);
+
+	INT32 sx = 0;
+	INT32 sy = 0;
+	INT32 w  = src->Width();
+	INT32 h  = src->Height();
+	if (src_rect)
+	{
+		sx = src_rect->x;
+		sy = src_rect->y;
+		w  = std::min<INT32>(src_rect->w, src->Width()  - sx);
+		h  = std::min<INT32>(src_rect->h, src->Height() - sy);
+	}
+
+	// clip against the destination surface
+	INT32 dx = DestX;
+	INT32 dy = DestY;
+	if (dx < 0) { sx -= dx; w += dx; dx = 0; }
+	if (dy < 0) { sy -= dy; h += dy; dy = 0; }
+	w = std::min<INT32>(w, dst->Width()  - dx);
+	h = std::min<INT32>(h, dst->Height() - dy);
+	if (w <= 0 || h <= 0) return;
+
+	SGPVSurface::Lock lsrc(src);
+	SGPVSurface::Lock ldst(dst);
+	UINT16 const* const pal = src->p16BPPPalette;
+	for (INT32 row = 0; row != h; ++row)
+	{
+		UINT8 const* s = lsrc.Buffer<UINT8>() + (sy + row) * lsrc.Pitch() + sx;
+		UINT16*      d = reinterpret_cast<UINT16*>(ldst.Buffer<UINT8>() + (dy + row) * ldst.Pitch()) + dx;
+		for (INT32 col = 0; col != w; ++col) d[col] = pal[s[col]];
+	}
+}
+
+
 void BltVideoSurfaceHalf(SGPVSurface* const dst, SGPVSurface* const src, INT32 const DestX, INT32 const DestY, SGPBox const* const src_rect)
 {
 	SGPVSurface::Lock lsrc(src);
@@ -317,6 +518,35 @@ void FillVideoSurfaceWithStretch(SGPVSurface* const dst, SGPVSurface* const src)
 	dstRec.set(0, 0, dst->Width(), dst->Height());
 	BltStretchVideoSurface(dst, src, &srcRec, &dstRec);
 }
+
+void BltVideoSurfaceSmoothScaled(SGPVSurface* const dst, SGPVSurface* const src, SGPBox const& dst_rect)
+{
+	SDL_Rect const r{ dst_rect.x, dst_rect.y, int(dst_rect.w), int(dst_rect.h) };
+	SDL_BlitSurfaceScaled(src->surface_.get(), nullptr, dst->surface_.get(), &r, SDL_SCALEMODE_LINEAR);
+}
+
+
+SGPBox FitImageToScreen(UINT16 const w, UINT16 const h, UINT16 const max_w, UINT16 const max_h)
+{
+	float const scale = std::min({ 1.0f, float(max_w) / w, float(max_h) / h });
+	UINT16 const dw = UINT16(w * scale);
+	UINT16 const dh = UINT16(h * scale);
+	return SGPBox{ UINT16((SCREEN_WIDTH - dw) / 2), UINT16((SCREEN_HEIGHT - dh) / 2), dw, dh };
+}
+
+
+void BltBackgroundImageOnce(SGPVSurface* const dst, const char* const filename, INT32 const std_x, INT32 const std_y)
+{
+	std::unique_ptr<SGPVSurface> src(AddVideoSurfaceFromFile(filename));
+	// 640x480 is the size of the standard interface area
+	if (src->Width() <= 640 && src->Height() <= 480)
+	{
+		BltVideoSurface(dst, src.get(), std_x, std_y, NULL);
+		return;
+	}
+	BltVideoSurfaceSmoothScaled(dst, src.get(), FitImageToScreen(src->Width(), src->Height(), SCREEN_WIDTH, SCREEN_HEIGHT));
+}
+
 
 SGPPaletteEntry const * SGPVSurface::GetPalette() const
 {

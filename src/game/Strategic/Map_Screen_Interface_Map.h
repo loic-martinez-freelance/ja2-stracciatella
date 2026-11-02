@@ -117,16 +117,17 @@ enum {
 };
 
 
-// size of squares on the map
-#define MAP_GRID_X		21
-#define MAP_GRID_Y		18
+// size of squares on the map (Wildfire shows the map at twice the size)
+#define MAP_GRID_X		MAP_LAYOUT(21, 42)
+#define MAP_GRID_Y		MAP_LAYOUT(18, 36)
 
 
-// map view region
-#define MAP_VIEW_START_X	(STD_SCREEN_X + 270)
-#define MAP_VIEW_START_Y	(STD_SCREEN_Y + 10)
-#define MAP_VIEW_WIDTH		336
-#define MAP_VIEW_HEIGHT		298
+// map view region. The map image is blitted at MAP_VIEW_START_X + 1, sector
+// (1, 1) is drawn one grid square right of and below MAP_VIEW_START.
+#define MAP_VIEW_START_X	(MAP_ORIGIN_X + MAP_LAYOUT(270, 275))
+#define MAP_VIEW_START_Y	(MAP_ORIGIN_Y + MAP_LAYOUT(10, 17))
+#define MAP_VIEW_WIDTH		(16 * MAP_GRID_X)
+#define MAP_VIEW_HEIGHT		(16 * MAP_GRID_Y + 10)
 
 
 // number of units wide

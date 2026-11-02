@@ -28,6 +28,14 @@
 #define STD_SCREEN_Y                    (g_ui.m_stdScreenOffsetY)
 #define MAP_SCREEN_WIDTH                (g_ui.m_mapScreenWidth)
 #define MAP_SCREEN_HEIGHT               (g_ui.m_mapScreenHeight)
+/* Origin of the strategic map screen. Equals STD_SCREEN_X/Y for the original
+ * 640x480 layout; the Wildfire layout is 1024x768. */
+#define MAP_ORIGIN_X                    (g_ui.m_mapScreenOffsetX)
+#define MAP_ORIGIN_Y                    (g_ui.m_mapScreenOffsetY)
+/* Pick a value depending on the tactical bottom panels (original or Wildfire). */
+#define TAC_LAYOUT(original, wildfire)  (g_ui.m_wildfireTacticalPanels ? (wildfire) : (original))
+/* Pick a value depending on the map screen layout (original or Wildfire). */
+#define MAP_LAYOUT(original, wildfire)  (g_ui.m_wildfireMapScreen ? (wildfire) : (original))
 
 #define SM_BODYINV_X                    (INTERFACE_START_X + 244)
 #define SM_BODYINV_Y                    (INV_INTERFACE_START_Y + 6)
@@ -40,7 +48,7 @@
 #define DEFAULT_EXTERN_PANEL_Y_POS      (STD_SCREEN_Y + 40)
 
 #define TEAMPANEL_SLOT_WIDTH            (83)     // width of one slot in the bottom team panel
-#define TEAMPANEL_BUTTONSBOX_WIDTH      (142)    // width of the container of the buttons on the right of team panel
+#define TEAMPANEL_BUTTONSBOX_WIDTH      TAC_LAYOUT(142, 194) // width of the container of the buttons (and, for Wildfire, the radar) on the right of team panel
 #define TEAMPANEL_HEIGHT                (120)    // height of the bottom bar team panel
 
 
@@ -124,6 +132,15 @@ public:
 	UINT16                m_teamPanelSlotsTotalWidth;       // total width of all team slots in the bottom team panel
 	UINT16                m_teamPanelWidth;                 // width of the entire team panel including slots and buttons
 
+	/** Jagged Alliance 2: Wildfire 6 ships a 1024x768 strategic map screen
+	 * (bigger map, message log in the left column, new bottom panel). */
+	bool                  m_wildfireMapScreen = false;
+	/** Wildfire 6 also ships 1024 pixel wide tactical bottom panels with ten
+	 * merc slots and the radar in a box of its own. */
+	bool                  m_wildfireTacticalPanels = false;
+	UINT16                m_mapScreenOffsetX = 0;         /** Offset of the strategic map screen */
+	UINT16                m_mapScreenOffsetY = 0;         /** Offset of the strategic map screen */
+
 	UINT16                m_stdScreenOffsetX;             /** Offset of the standard (640x480) window */
 	UINT16                m_stdScreenOffsetY;             /** Offset of the standard (640x480) window */
 
@@ -137,6 +154,11 @@ public:
 
 	/** Check if the screen is bigger than original 640x480. */
 	bool isBigScreen() const;
+
+	/** Detect the Wildfire 1024x768 map screen from the game data. Enlarges
+	 * the screen to at least 1024x768 if needed. Must be called after the
+	 * game data has been loaded and before recalculatePositions(). */
+	void detectMapScreenLayout();
 
 	UINT16 currentHeight() const;
 	UINT16 get_CLOCK_X() const;

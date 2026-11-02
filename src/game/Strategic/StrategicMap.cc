@@ -1,4 +1,5 @@
 #include "StrategicMap.h"
+#include "SaveLoadScreen.h"
 
 #include "AI.h"
 #include "Ambient_Control.h"
@@ -556,6 +557,8 @@ void SetCurrentWorldSector(const SGPSector& sector)
 		}
 
 		gTacticalStatus.ubNumCrowsPossible = 5 + Random(5);
+
+		RequestAutoSave(AutoSaveReason::SECTOR_ENTERED);
 	}
 }
 

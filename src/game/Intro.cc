@@ -2,6 +2,8 @@
 #include "Cursor_Control.h"
 #include "Directories.h"
 #include "Game_Init.h"
+#include "GameInstance.h"
+#include "ContentManager.h"
 #include "Input.h"
 #include "Cursors.h"
 #include "Intro.h"
@@ -364,7 +366,11 @@ void SetIntroType( INT8 bIntroType )
 static void DisplaySirtechSplashScreen(void)
 {
 	FRAME_BUFFER->Fill(0);
-	BltVideoObjectOnce(FRAME_BUFFER, INTERFACEDIR "/sirtechsplash.sti", 0, STD_SCREEN_X, STD_SCREEN_Y);
+	// Not every game version has this logo (e.g. Wildfire)
+	if (GCM->doesGameResExists(INTERFACEDIR "/sirtechsplash.sti"))
+	{
+		BltVideoObjectOnce(FRAME_BUFFER, INTERFACEDIR "/sirtechsplash.sti", 0, STD_SCREEN_X, STD_SCREEN_Y);
+	}
 	InvalidateScreen();
 	RefreshScreen();
 }

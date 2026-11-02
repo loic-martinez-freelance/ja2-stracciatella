@@ -3,9 +3,11 @@
 
 #include "Button_System.h"
 #include "Types.h"
+#include "UILayout.h"
 
 
-#define MAX_MESSAGES_ON_MAP_BOTTOM  9
+// the Wildfire layout shows the message log in the tall left column
+#define MAX_MESSAGES_ON_MAP_BOTTOM  MAP_LAYOUT(9, 38)
 
 
 enum ExitToWhere

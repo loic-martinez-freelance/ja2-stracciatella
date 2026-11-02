@@ -1865,6 +1865,9 @@ static void RenderDynamicWorld(void)
 }
 
 
+// smallest horizontal step (in screen pixels) tried when approaching the map edge
+#define MIN_EDGE_SCROLL_STEP_X 20
+
 static BOOLEAN HandleScrollDirections(UINT32 ScrollFlags, INT16 sScrollXStep, INT16 sScrollYStep, BOOLEAN fCheckOnly)
 {
 	// printf("HandleScrollDirections: %d, (%4d, %4d), %d\n", ScrollFlags, sScrollXStep, sScrollYStep, fCheckOnly);
@@ -1881,12 +1884,21 @@ static BOOLEAN HandleScrollDirections(UINT32 ScrollFlags, INT16 sScrollXStep, IN
 		// Check horizontal
 		INT16 sTempX_W;
 		INT16 sTempY_W;
-		FromScreenToCellCoordinates(scroll_x, 0, &sTempX_W, &sTempY_W);
-		const INT16 sTempRenderCenterX = gsRenderCenterX + sTempX_W;
-		const INT16 sTempRenderCenterY = gsRenderCenterY + sTempY_W;
-		if (!ApplyScrolling(sTempRenderCenterX, sTempRenderCenterY, FALSE, fCheckOnly, ScrollType_Horizontal))
+		// Near the map edge a full step may not fit anymore. Take smaller steps
+		// then, otherwise the view can stop short of the edge and the exit
+		// cursor never shows up (the east edge only tolerates 30 pixels).
+		for (;;)
 		{
-			scroll_x = 0;
+			FromScreenToCellCoordinates(scroll_x, 0, &sTempX_W, &sTempY_W);
+			const INT16 sTempRenderCenterX = gsRenderCenterX + sTempX_W;
+			const INT16 sTempRenderCenterY = gsRenderCenterY + sTempY_W;
+			if (ApplyScrolling(sTempRenderCenterX, sTempRenderCenterY, FALSE, fCheckOnly, ScrollType_Horizontal)) break;
+			if (std::abs(scroll_x) <= MIN_EDGE_SCROLL_STEP_X)
+			{
+				scroll_x = 0;
+				break;
+			}
+			scroll_x /= 2;
 		}
 	}
 

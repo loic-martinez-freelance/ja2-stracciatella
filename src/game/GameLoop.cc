@@ -1,4 +1,7 @@
 #include "GameLoop.h"
+#include "SaveLoadScreen.h"
+#include "Video.h"
+#include "MessageBoxScreen.h"
 #include "GameVersion.h"
 #include "Input.h"
 #include "SGP.h"
@@ -106,6 +109,28 @@ static void HandleNewScreenChange(UINT32 uiNewScreen, UINT32 uiOldScreen);
 // This is the main Gameloop. This should eventually by one big switch statement which represents
 // the state of the game (i.e. Main Menu, PC Generation, Combat loop, etc....)
 // This function exits constantly and reenters constantly
+/* Screens that only use the standard 640x480 area (the laptop, save/load and
+ * options screens) are scaled up to fill the window on bigger screens. */
+static void UpdateZoomedScreenArea()
+{
+	ScreenID screen = guiCurrentScreen;
+	// message boxes are drawn over the screen they return to
+	if (screen == MSG_BOX_SCREEN) screen = gMsgBox.uiExitScreen;
+
+	bool const zoom = g_ui.isBigScreen() &&
+		(screen == LAPTOP_SCREEN || screen == SAVE_LOAD_SCREEN || screen == OPTIONS_SCREEN);
+	if (zoom)
+	{
+		SGPBox const area = { STD_SCREEN_X, STD_SCREEN_Y, 640, 480 };
+		VideoSetZoomedArea(&area);
+	}
+	else
+	{
+		VideoSetZoomedArea(nullptr);
+	}
+}
+
+
 void GameLoop(void)
 try
 {
@@ -209,6 +234,9 @@ try
 		HandleNewScreenChange( uiOldScreen, guiCurrentScreen );
 		guiCurrentScreen = uiOldScreen;
 	}
+
+	HandlePendingAutoSave();
+	UpdateZoomedScreenArea();
 
 	// Call the special version of RefreshScreen that respects the
 	// user defined FPS limit in game.json.

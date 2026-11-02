@@ -56,6 +56,9 @@ extern INT32 giScrollButtonState;
 void DeleteMapBorderGraphics( void );
 void RenderMapBorder( void );
 
+// draw the marker of the shown underground level
+void DisplayCurrentLevelMarker(void);
+
 void ToggleShowTownsMode( void );
 void ToggleShowMinesMode( void );
 void ToggleShowMilitiaMode( void );

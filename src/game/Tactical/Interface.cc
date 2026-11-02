@@ -1761,7 +1761,8 @@ static void CreateTopMessage(void)
 	{
 		AutoSGPVObject bar_vo(AddVideoObjectFromFile(bar_file));
 
-		BltVideoObject(dst, bar_vo.get(), bar_gfx, STD_SCREEN_X, 0);
+		// Wildfire's bar is 1024 pixels wide
+		BltVideoObject(dst, bar_vo.get(), bar_gfx, TAC_LAYOUT(STD_SCREEN_X, (SCREEN_WIDTH - 1024) / 2), 0);
 
 		if (fDoLimitBar)
 		{

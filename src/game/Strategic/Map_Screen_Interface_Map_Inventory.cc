@@ -59,19 +59,42 @@
 #define MAP_IVEN_FONT						SMALLCOMPFONT
 
 // inventory pool slot positions and sizes
-#define MAP_INV_SLOT_ROWS 9
+#define MAP_INV_SLOT_ROWS MAP_LAYOUT(9, 10)
 
 
-static const SGPBox g_sector_inv_box        = { 261,   0, 379, 360 };
-static const SGPBox g_sector_inv_title_box  = { 266,   5, 370,  29 };
-static const SGPBox g_sector_inv_slot_box   = { 274,  37,  72,  32 };
-static const SGPBox g_sector_inv_region_box = {   0,   0,  67,  31 }; // relative to g_sector_inv_slot_box
-static const SGPBox g_sector_inv_item_box   = {   6,   0,  61,  24 }; // relative to g_sector_inv_slot_box
-static const SGPBox g_sector_inv_bar_box    = {   2,   2,   2,  20 }; // relative to g_sector_inv_slot_box
-static const SGPBox g_sector_inv_name_box   = {   0,  24,  67,   7 }; // relative to g_sector_inv_slot_box
-static const SGPBox g_sector_inv_loc_box    = { 326, 337,  39,  10 };
-static const SGPBox g_sector_inv_count_box  = { 437, 337,  39,  10 };
-static const SGPBox g_sector_inv_page_box   = { 505, 337,  50,  10 };
+static const SGPBox g_orig_sector_inv_box        = { 261,   0, 379, 360 };
+static const SGPBox g_orig_sector_inv_title_box  = { 266,   5, 370,  29 };
+static const SGPBox g_orig_sector_inv_slot_box   = { 274,  37,  72,  32 };
+static const SGPBox g_orig_sector_inv_region_box = {   0,   0,  67,  31 }; // relative to g_sector_inv_slot_box
+static const SGPBox g_orig_sector_inv_item_box   = {   6,   0,  61,  24 }; // relative to g_sector_inv_slot_box
+static const SGPBox g_orig_sector_inv_bar_box    = {   2,   2,   2,  20 }; // relative to g_sector_inv_slot_box
+static const SGPBox g_orig_sector_inv_name_box   = {   0,  24,  67,   7 }; // relative to g_sector_inv_slot_box
+static const SGPBox g_orig_sector_inv_loc_box    = { 326, 337,  39,  10 };
+static const SGPBox g_orig_sector_inv_count_box  = { 437, 337,  39,  10 };
+static const SGPBox g_orig_sector_inv_page_box   = { 505, 337,  50,  10 };
+
+// Wildfire: 1024x768 layout, the background covers the whole map border
+static const SGPBox g_wf_sector_inv_box          = { 261,   0, 763, 647 };
+static const SGPBox g_wf_sector_inv_title_box    = { 266,   5, 753,  28 };
+static const SGPBox g_wf_sector_inv_slot_box     = { 283,  37, 145,  57 };
+static const SGPBox g_wf_sector_inv_region_box   = {   0,   0, 138,  48 }; // relative to g_sector_inv_slot_box
+static const SGPBox g_wf_sector_inv_item_box     = {  14,   2, 118,  32 }; // relative to g_sector_inv_slot_box
+static const SGPBox g_wf_sector_inv_bar_box      = {  10,   4,   2,  28 }; // relative to g_sector_inv_slot_box
+static const SGPBox g_wf_sector_inv_name_box     = {   8,  36, 128,  10 }; // relative to g_sector_inv_slot_box
+static const SGPBox g_wf_sector_inv_loc_box      = { 261 + 225, 621,  58,  10 };
+static const SGPBox g_wf_sector_inv_count_box    = { 261 + 449, 621,  56,  10 };
+static const SGPBox g_wf_sector_inv_page_box     = { 261 + 549, 622,  50,  10 };
+
+#define g_sector_inv_box        MAP_LAYOUT(g_orig_sector_inv_box,        g_wf_sector_inv_box)
+#define g_sector_inv_title_box  MAP_LAYOUT(g_orig_sector_inv_title_box,  g_wf_sector_inv_title_box)
+#define g_sector_inv_slot_box   MAP_LAYOUT(g_orig_sector_inv_slot_box,   g_wf_sector_inv_slot_box)
+#define g_sector_inv_region_box MAP_LAYOUT(g_orig_sector_inv_region_box, g_wf_sector_inv_region_box)
+#define g_sector_inv_item_box   MAP_LAYOUT(g_orig_sector_inv_item_box,   g_wf_sector_inv_item_box)
+#define g_sector_inv_bar_box    MAP_LAYOUT(g_orig_sector_inv_bar_box,    g_wf_sector_inv_bar_box)
+#define g_sector_inv_name_box   MAP_LAYOUT(g_orig_sector_inv_name_box,   g_wf_sector_inv_name_box)
+#define g_sector_inv_loc_box    MAP_LAYOUT(g_orig_sector_inv_loc_box,    g_wf_sector_inv_loc_box)
+#define g_sector_inv_count_box  MAP_LAYOUT(g_orig_sector_inv_count_box,  g_wf_sector_inv_count_box)
+#define g_sector_inv_page_box   MAP_LAYOUT(g_orig_sector_inv_page_box,   g_wf_sector_inv_page_box)
 
 
 // the current highlighted item
@@ -94,9 +117,9 @@ static INT32 iLastInventoryPoolPage = 0;
 INT16 sObjectSourceGridNo = 0;
 
 // the inventory slots
-static MOUSE_REGION MapInventoryPoolSlots[MAP_INVENTORY_POOL_SLOT_COUNT];
+static MOUSE_REGION MapInventoryPoolSlots[MAP_INVENTORY_POOL_MAX_SLOT_COUNT];
 static MOUSE_REGION MapInventoryPoolMask;
-BOOLEAN fMapInventoryItemCompatable[ MAP_INVENTORY_POOL_SLOT_COUNT ];
+BOOLEAN fMapInventoryItemCompatable[ MAP_INVENTORY_POOL_MAX_SLOT_COUNT ];
 static BOOLEAN      fChangedInventorySlots = FALSE;
 
 // the unseen items list...have to save this
@@ -138,7 +161,7 @@ void MPrintCenteredInBox(int x, int y, ST::string const& text, SGPBox const& box
 void BlitInventoryPoolGraphic( void )
 {
 	const SGPBox* const box = &g_sector_inv_box;
-	BltVideoObject(guiSAVEBUFFER, guiMapInventoryPoolBackground, 0, STD_SCREEN_X + box->x, STD_SCREEN_Y + box->y);
+	BltVideoObject(guiSAVEBUFFER, guiMapInventoryPoolBackground, 0, MAP_ORIGIN_X + box->x, MAP_ORIGIN_Y + box->y);
 
 	// resize list
 	CheckAndUnDateSlotAllocation( );
@@ -193,8 +216,8 @@ static BOOLEAN RenderItemInPoolSlot(INT32 iCurrentSlot, INT32 iFirstSlotOnPage)
 	if (item.o.ubNumberOfObjects == 0) return FALSE;
 
 	const SGPBox* const slot_box = &g_sector_inv_slot_box;
-	const INT32 dx = STD_SCREEN_X + slot_box->x + slot_box->w * (iCurrentSlot / MAP_INV_SLOT_ROWS);
-	const INT32 dy = STD_SCREEN_Y + slot_box->y + slot_box->h * (iCurrentSlot % MAP_INV_SLOT_ROWS);
+	const INT32 dx = MAP_ORIGIN_X + slot_box->x + slot_box->w * (iCurrentSlot / MAP_INV_SLOT_ROWS);
+	const INT32 dy = MAP_ORIGIN_Y + slot_box->y + slot_box->h * (iCurrentSlot % MAP_INV_SLOT_ROWS);
 
 	SetFontDestBuffer(guiSAVEBUFFER);
 	const SGPBox* const item_box = &g_sector_inv_item_box;
@@ -453,8 +476,8 @@ static void CreateMapInventoryPoolSlots(void)
 {
 	{
 		const SGPBox* const inv_box = &g_sector_inv_box;
-		UINT16        const x       = STD_SCREEN_X + inv_box->x;
-		UINT16        const y       = STD_SCREEN_Y + inv_box->y;
+		UINT16        const x       = MAP_ORIGIN_X + inv_box->x;
+		UINT16        const y       = MAP_ORIGIN_Y + inv_box->y;
 		UINT16        const w       = inv_box->w;
 		UINT16        const h       = inv_box->h;
 		MSYS_DefineRegion(&MapInventoryPoolMask, x, y, x + w - 1, y + h - 1, MSYS_PRIORITY_HIGH, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, MouseCallbackPrimarySecondary(MSYS_NO_CALLBACK, MapInvenPoolScreenMaskCallbackSecondary, MapInvenPoolScreenMaskCallbackScroll));
@@ -466,8 +489,8 @@ static void CreateMapInventoryPoolSlots(void)
 	{
 		UINT16        const sx = i / MAP_INV_SLOT_ROWS;
 		UINT16        const sy = i % MAP_INV_SLOT_ROWS;
-		UINT16        const x  = reg_box->x + STD_SCREEN_X + slot_box->x + sx * slot_box->w;
-		UINT16        const y  = reg_box->y + STD_SCREEN_Y + slot_box->y + sy * slot_box->h;
+		UINT16        const x  = reg_box->x + MAP_ORIGIN_X + slot_box->x + sx * slot_box->w;
+		UINT16        const y  = reg_box->y + MAP_ORIGIN_Y + slot_box->y + sy * slot_box->h;
 		UINT16        const w  = reg_box->w;
 		UINT16        const h  = reg_box->h;
 		MOUSE_REGION* const r  = &MapInventoryPoolSlots[i];
@@ -628,8 +651,8 @@ static void MapInventoryPoolNextBtn(GUI_BUTTON* btn, UINT32 reason);
 
 static void CreateMapInventoryButtons(void)
 {
-	guiMapInvenButton[0] = QuickCreateButtonImg(INTERFACEDIR "/map_screen_bottom_arrows.sti", 10, 1, -1, 3, -1, STD_SCREEN_X + 559, STD_SCREEN_Y + 336, MSYS_PRIORITY_HIGHEST, MapInventoryPoolNextBtn);
-	guiMapInvenButton[1] = QuickCreateButtonImg(INTERFACEDIR "/map_screen_bottom_arrows.sti",  9, 0, -1, 2, -1, STD_SCREEN_X + 487, STD_SCREEN_Y + 336, MSYS_PRIORITY_HIGHEST, MapInventoryPoolPrevBtn);
+	guiMapInvenButton[0] = QuickCreateButtonImg(INTERFACEDIR "/map_screen_bottom_arrows.sti", 10, 1, -1, 3, -1, MAP_ORIGIN_X + MAP_LAYOUT(559, 261 + 603), MAP_ORIGIN_Y + MAP_LAYOUT(336, 621), MSYS_PRIORITY_HIGHEST, MapInventoryPoolNextBtn);
+	guiMapInvenButton[1] = QuickCreateButtonImg(INTERFACEDIR "/map_screen_bottom_arrows.sti",  9, 0, -1, 2, -1, MAP_ORIGIN_X + MAP_LAYOUT(487, 261 + 532), MAP_ORIGIN_Y + MAP_LAYOUT(336, 621), MSYS_PRIORITY_HIGHEST, MapInventoryPoolPrevBtn);
 
 	//reset the current inventory page to be the first page
 	iCurrentInventoryPoolPage = 0;
@@ -1396,7 +1419,7 @@ static void DisplayPagesForMapInventoryPool(void)
 	SetFontAttributes(COMPFONT, 183);
 	SetFontDestBuffer(guiSAVEBUFFER);
 
-	MPrintCenteredInBox(STD_SCREEN_X, STD_SCREEN_Y,
+	MPrintCenteredInBox(MAP_ORIGIN_X, MAP_ORIGIN_Y,
 		ST::format("{} / {}", iCurrentInventoryPoolPage + 1, iLastInventoryPoolPage + 1),
 		g_sector_inv_page_box);
 
@@ -1444,7 +1467,7 @@ static void DrawNumberOfInventoryPoolItems()
 	SetFontAttributes(COMPFONT, 183);
 	SetFontDestBuffer(guiSAVEBUFFER);
 
-	MPrintCenteredInBox(STD_SCREEN_X, STD_SCREEN_Y,
+	MPrintCenteredInBox(MAP_ORIGIN_X, MAP_ORIGIN_Y,
 		ST::string::from_uint(GetTotalNumberOfItemsInSectorStash()),
 		g_sector_inv_count_box);
 
@@ -1455,7 +1478,7 @@ static void DrawNumberOfInventoryPoolItems()
 static void CreateMapInventoryPoolDoneButton(void)
 {
 	// create done button
-	guiMapInvenButton[2] = QuickCreateButtonImg(INTERFACEDIR "/done_button.sti", 0, 1, STD_SCREEN_X + 587, STD_SCREEN_Y + 333, MSYS_PRIORITY_HIGHEST, MapInventoryPoolDoneBtn);
+	guiMapInvenButton[2] = QuickCreateButtonImg(INTERFACEDIR "/done_button.sti", 0, 1, MAP_ORIGIN_X + MAP_LAYOUT(587, 261 + 682), MAP_ORIGIN_Y + MAP_LAYOUT(333, 615), MSYS_PRIORITY_HIGHEST, MapInventoryPoolDoneBtn);
 }
 
 
@@ -1472,7 +1495,7 @@ static void DisplayCurrentSector(void)
 	SetFontAttributes(COMPFONT, 183);
 	SetFontDestBuffer(guiSAVEBUFFER);
 
-	MPrintCenteredInBox(STD_SCREEN_X, STD_SCREEN_Y,
+	MPrintCenteredInBox(MAP_ORIGIN_X, MAP_ORIGIN_Y,
 		ST::format("{}{}{}", pMapVertIndex[ sSelMap.y ],
 			pMapHortIndex[ sSelMap.x ], pMapDepthIndex[ iCurrentMapSectorZ ]),
 		g_sector_inv_loc_box);
@@ -1506,14 +1529,15 @@ static void DrawTextOnMapInventoryBackground(void)
 
 	SetFontDestBuffer(guiSAVEBUFFER);
 
-	int xPos = STD_SCREEN_X + 268;
-	int yPos = STD_SCREEN_Y + 342;
+	// labels left of the location and item count boxes
+	int xPos = MAP_ORIGIN_X + MAP_LAYOUT(268, 261 + 165);
+	int yPos = MAP_ORIGIN_Y + MAP_LAYOUT(342, 626);
 
 	//Calculate the height of the string, as it needs to be vertically centered.
 	usStringHeight = DisplayWrappedString(xPos, yPos, 53, 1, MAP_IVEN_FONT, FONT_BEIGE, pMapInventoryStrings[0], FONT_BLACK, RIGHT_JUSTIFIED | DONT_DISPLAY_TEXT);
 	DisplayWrappedString(xPos, yPos - (usStringHeight / 2), 53, 1, MAP_IVEN_FONT, FONT_BEIGE, pMapInventoryStrings[0], FONT_BLACK, RIGHT_JUSTIFIED);
 
-	xPos = STD_SCREEN_X + 369;
+	xPos = MAP_ORIGIN_X + MAP_LAYOUT(369, 261 + 378);
 
 	//Calculate the height of the string, as it needs to be vertically centered.
 	usStringHeight = DisplayWrappedString(xPos, yPos, 65, 1, MAP_IVEN_FONT, FONT_BEIGE, pMapInventoryStrings[1], FONT_BLACK, RIGHT_JUSTIFIED | DONT_DISPLAY_TEXT);
@@ -1546,7 +1570,7 @@ static void DrawTextOnSectorInventory(void)
 	SetFontDestBuffer(guiSAVEBUFFER);
 	SetFontAttributes(FONT14ARIAL, FONT_WHITE);
 
-	MPrintCenteredInBox(STD_SCREEN_X, STD_SCREEN_Y,
+	MPrintCenteredInBox(MAP_ORIGIN_X, MAP_ORIGIN_Y,
 		zMarksMapScreenText[11], g_sector_inv_title_box);
 
 	SetFontDestBuffer(FRAME_BUFFER);

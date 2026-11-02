@@ -1,5 +1,9 @@
 #include "UILayout.h"
 
+#include "Directories.h"
+#include "HImage.h"
+#include "Logger.h"
+
 #include "ContentManager.h"
 #include "GameInstance.h"
 #include "GamePolicy.h"
@@ -7,11 +11,14 @@
 #include "MapScreen.h"
 #include "ScreenIDs.h"
 #include "Soldier_Control.h"
+#include <algorithm>
 #include <stdexcept>
 #include <string_theory/string>
 
 #define MIN_INTERFACE_WIDTH       640
 #define MIN_INTERFACE_HEIGHT      480
+#define WILDFIRE_INTERFACE_WIDTH  1024
+#define WILDFIRE_INTERFACE_HEIGHT  768
 
 /**
  * Default screen layout.
@@ -46,11 +53,49 @@ bool UILayout::isBigScreen() const
 }
 
 
-UINT16 UILayout::currentHeight() const             { return fInMapMode ? (STD_SCREEN_Y + m_mapScreenHeight) : m_screenHeight; }
-UINT16 UILayout::get_CLOCK_X() const               { return fInMapMode ? (STD_SCREEN_X + 554) : m_teamPanelPosition.iX + m_teamPanelSlotsTotalWidth + 56; }
-UINT16 UILayout::get_CLOCK_Y() const               { return currentHeight() - 23;                                  }
-UINT16 UILayout::get_RADAR_WINDOW_X() const        { return fInMapMode ? (STD_SCREEN_X + 543) : m_teamPanelPosition.iX + m_teamPanelSlotsTotalWidth + 45; }
-UINT16 UILayout::get_RADAR_WINDOW_TM_Y() const     { return currentHeight() - 107;                                 }
+void UILayout::detectMapScreenLayout()
+{
+	// The original map border is 379 pixels wide, Wildfire's is 763.
+	try
+	{
+		AutoSGPImage img(CreateImage(INTERFACEDIR "/mbs.sti", IMAGE_ALLIMAGEDATA));
+		m_wildfireMapScreen = img->usNumberOfObjects > 0 && img->pETRLEObject[0].usWidth > MIN_INTERFACE_WIDTH - 261;
+	}
+	catch (const std::exception& ex)
+	{
+		SLOGW("Could not determine the map screen layout: {}", ex.what());
+		m_wildfireMapScreen = false;
+	}
+	try
+	{
+		AutoSGPImage img(CreateImage(INTERFACEDIR "/bottom_bar.sti", IMAGE_ALLIMAGEDATA));
+		m_wildfireTacticalPanels = img->usNumberOfObjects > 0 && img->pETRLEObject[0].usWidth >= WILDFIRE_INTERFACE_WIDTH;
+	}
+	catch (const std::exception& ex)
+	{
+		SLOGW("Could not determine the tactical panel layout: {}", ex.what());
+		m_wildfireTacticalPanels = false;
+	}
+	if (m_wildfireTacticalPanels) SLOGI("Using the Wildfire 1024 pixel wide tactical panels");
+	if (!m_wildfireMapScreen && !m_wildfireTacticalPanels) return;
+
+	SLOGI("Using the Wildfire 1024x768 map screen layout");
+	if (m_screenWidth < WILDFIRE_INTERFACE_WIDTH || m_screenHeight < WILDFIRE_INTERFACE_HEIGHT)
+	{
+		SLOGI("Increasing the resolution to at least {}x{} for the Wildfire map screen", WILDFIRE_INTERFACE_WIDTH, WILDFIRE_INTERFACE_HEIGHT);
+		setScreenSize(std::max<UINT16>(m_screenWidth, WILDFIRE_INTERFACE_WIDTH), std::max<UINT16>(m_screenHeight, WILDFIRE_INTERFACE_HEIGHT));
+	}
+}
+
+
+UINT16 UILayout::currentHeight() const             { return fInMapMode ? (m_wildfireMapScreen ? MAP_ORIGIN_Y + WILDFIRE_INTERFACE_HEIGHT : STD_SCREEN_Y + m_mapScreenHeight) : m_screenHeight; }
+// Wildfire: clock and radar sit in the right part of its bottom panel (at 261, 647)
+// Wildfire: clock and radar sit in the right part of its bottom panel (at 261, 647),
+// in tactical they have a box of their own right of the buttons
+UINT16 UILayout::get_CLOCK_X() const               { return fInMapMode ? (MAP_ORIGIN_X + MAP_LAYOUT(554, 261 + 668)) : m_teamPanelPosition.iX + m_teamPanelSlotsTotalWidth + TAC_LAYOUT(56, 108); }
+UINT16 UILayout::get_CLOCK_Y() const               { return fInMapMode ? (m_wildfireMapScreen ? MAP_ORIGIN_Y + 647 + 97 : currentHeight() - 23) : currentHeight() - TAC_LAYOUT(23, 26); }
+UINT16 UILayout::get_RADAR_WINDOW_X() const        { return fInMapMode ? (MAP_ORIGIN_X + MAP_LAYOUT(543, 261 + 665)) : m_teamPanelPosition.iX + m_teamPanelSlotsTotalWidth + TAC_LAYOUT(45, 96); }
+UINT16 UILayout::get_RADAR_WINDOW_TM_Y() const     { return fInMapMode ? (m_wildfireMapScreen ? MAP_ORIGIN_Y + 647 + 12 : currentHeight() - 107) : currentHeight() - TAC_LAYOUT(107, 110); }
 UINT16 UILayout::get_INV_INTERFACE_START_Y() const { return m_screenHeight - INV_INTERFACE_HEIGHT;                                  }
 
 
@@ -67,6 +112,16 @@ void UILayout::recalculatePositions()
 
 	m_stdScreenOffsetX            = (m_screenWidth - MIN_INTERFACE_WIDTH) / 2;
 	m_stdScreenOffsetY            = (m_screenHeight - MIN_INTERFACE_HEIGHT) / 2;
+	if (m_wildfireMapScreen)
+	{
+		m_mapScreenOffsetX = (m_screenWidth  - WILDFIRE_INTERFACE_WIDTH)  / 2;
+		m_mapScreenOffsetY = (m_screenHeight - WILDFIRE_INTERFACE_HEIGHT) / 2;
+	}
+	else
+	{
+		m_mapScreenOffsetX = m_stdScreenOffsetX;
+		m_mapScreenOffsetY = m_stdScreenOffsetY;
+	}
 
 	// tactical screen inventory position
 	m_invSlotPositionTac[HELMETPOS           ].set(startX + 344, startInvY +   6);
@@ -90,31 +145,38 @@ void UILayout::recalculatePositions()
 	m_invSlotPositionTac[SMALLPOCK8POS       ].set(startX + 432, startInvY +  77);
 
 	// map screen inventory position
-	m_invSlotPositionMap[HELMETPOS           ].set(m_stdScreenOffsetX + 204, m_stdScreenOffsetY + 116);
-	m_invSlotPositionMap[VESTPOS             ].set(m_stdScreenOffsetX + 204, m_stdScreenOffsetY + 145);
-	m_invSlotPositionMap[LEGPOS              ].set(m_stdScreenOffsetX + 204, m_stdScreenOffsetY + 205);
-	m_invSlotPositionMap[HEAD1POS            ].set(m_stdScreenOffsetX +  21, m_stdScreenOffsetY + 116);
-	m_invSlotPositionMap[HEAD2POS            ].set(m_stdScreenOffsetX +  21, m_stdScreenOffsetY + 140);
-	m_invSlotPositionMap[HANDPOS             ].set(m_stdScreenOffsetX +  21, m_stdScreenOffsetY + 194);
-	m_invSlotPositionMap[SECONDHANDPOS       ].set(m_stdScreenOffsetX +  21, m_stdScreenOffsetY + 218);
-	m_invSlotPositionMap[BIGPOCK1POS         ].set(m_stdScreenOffsetX +  98, m_stdScreenOffsetY + 251);
-	m_invSlotPositionMap[BIGPOCK2POS         ].set(m_stdScreenOffsetX +  98, m_stdScreenOffsetY + 275);
-	m_invSlotPositionMap[BIGPOCK3POS         ].set(m_stdScreenOffsetX +  98, m_stdScreenOffsetY + 299);
-	m_invSlotPositionMap[BIGPOCK4POS         ].set(m_stdScreenOffsetX +  98, m_stdScreenOffsetY + 323);
-	m_invSlotPositionMap[SMALLPOCK1POS       ].set(m_stdScreenOffsetX +  22, m_stdScreenOffsetY + 251);
-	m_invSlotPositionMap[SMALLPOCK2POS       ].set(m_stdScreenOffsetX +  22, m_stdScreenOffsetY + 275);
-	m_invSlotPositionMap[SMALLPOCK3POS       ].set(m_stdScreenOffsetX +  22, m_stdScreenOffsetY + 299);
-	m_invSlotPositionMap[SMALLPOCK4POS       ].set(m_stdScreenOffsetX +  22, m_stdScreenOffsetY + 323);
-	m_invSlotPositionMap[SMALLPOCK5POS       ].set(m_stdScreenOffsetX +  60, m_stdScreenOffsetY + 251);
-	m_invSlotPositionMap[SMALLPOCK6POS       ].set(m_stdScreenOffsetX +  60, m_stdScreenOffsetY + 275);
-	m_invSlotPositionMap[SMALLPOCK7POS       ].set(m_stdScreenOffsetX +  60, m_stdScreenOffsetY + 299);
-	m_invSlotPositionMap[SMALLPOCK8POS       ].set(m_stdScreenOffsetX +  60, m_stdScreenOffsetY + 323);
+	m_invSlotPositionMap[HELMETPOS           ].set(m_mapScreenOffsetX + 204, m_mapScreenOffsetY + 116);
+	m_invSlotPositionMap[VESTPOS             ].set(m_mapScreenOffsetX + 204, m_mapScreenOffsetY + 145);
+	m_invSlotPositionMap[LEGPOS              ].set(m_mapScreenOffsetX + 204, m_mapScreenOffsetY + 205);
+	m_invSlotPositionMap[HEAD1POS            ].set(m_mapScreenOffsetX +  21, m_mapScreenOffsetY + 116);
+	m_invSlotPositionMap[HEAD2POS            ].set(m_mapScreenOffsetX +  21, m_mapScreenOffsetY + 140);
+	m_invSlotPositionMap[HANDPOS             ].set(m_mapScreenOffsetX +  21, m_mapScreenOffsetY + 194);
+	m_invSlotPositionMap[SECONDHANDPOS       ].set(m_mapScreenOffsetX +  21, m_mapScreenOffsetY + 218);
+	m_invSlotPositionMap[BIGPOCK1POS         ].set(m_mapScreenOffsetX +  98, m_mapScreenOffsetY + 251);
+	m_invSlotPositionMap[BIGPOCK2POS         ].set(m_mapScreenOffsetX +  98, m_mapScreenOffsetY + 275);
+	m_invSlotPositionMap[BIGPOCK3POS         ].set(m_mapScreenOffsetX +  98, m_mapScreenOffsetY + 299);
+	m_invSlotPositionMap[BIGPOCK4POS         ].set(m_mapScreenOffsetX +  98, m_mapScreenOffsetY + 323);
+	m_invSlotPositionMap[SMALLPOCK1POS       ].set(m_mapScreenOffsetX +  22, m_mapScreenOffsetY + 251);
+	m_invSlotPositionMap[SMALLPOCK2POS       ].set(m_mapScreenOffsetX +  22, m_mapScreenOffsetY + 275);
+	m_invSlotPositionMap[SMALLPOCK3POS       ].set(m_mapScreenOffsetX +  22, m_mapScreenOffsetY + 299);
+	m_invSlotPositionMap[SMALLPOCK4POS       ].set(m_mapScreenOffsetX +  22, m_mapScreenOffsetY + 323);
+	m_invSlotPositionMap[SMALLPOCK5POS       ].set(m_mapScreenOffsetX +  60, m_mapScreenOffsetY + 251);
+	m_invSlotPositionMap[SMALLPOCK6POS       ].set(m_mapScreenOffsetX +  60, m_mapScreenOffsetY + 275);
+	m_invSlotPositionMap[SMALLPOCK7POS       ].set(m_mapScreenOffsetX +  60, m_mapScreenOffsetY + 299);
+	m_invSlotPositionMap[SMALLPOCK8POS       ].set(m_mapScreenOffsetX +  60, m_mapScreenOffsetY + 323);
 
 	m_invCamoRegion.set(SM_BODYINV_X, SM_BODYINV_Y);
 
-	m_progress_bar_box.set(STD_SCREEN_X + 5, 2, MIN_INTERFACE_WIDTH - 10, 12);
+	if (m_wildfireTacticalPanels)
+	{
+		m_progress_bar_box.set((m_screenWidth - WILDFIRE_INTERFACE_WIDTH) / 2 + 5, 2, WILDFIRE_INTERFACE_WIDTH - 10, 12);
+	}
+	else
+	{
+		m_progress_bar_box.set(STD_SCREEN_X + 5, 2, MIN_INTERFACE_WIDTH - 10, 12);
+	}
 	m_moneyButtonLoc.set(startX + 343, startInvY + 11);
-	m_MoneyButtonLocMap.set(m_stdScreenOffsetX + 174, m_stdScreenOffsetY + 115);
+	m_MoneyButtonLocMap.set(m_mapScreenOffsetX + 174, m_mapScreenOffsetY + 115);
 
 	m_VIEWPORT_START_X            = 0;
 	m_VIEWPORT_START_Y            = 0;
@@ -127,13 +189,13 @@ void UILayout::recalculatePositions()
 
 	m_worldClippingRect.set(0, 0, m_screenWidth, m_screenHeight - 120);
 
-	m_contractPosition.set(       m_stdScreenOffsetX + 120, m_stdScreenOffsetY +  50);
-	m_attributePosition.set(      m_stdScreenOffsetX + 220, m_stdScreenOffsetY + 150);
-	m_trainPosition.set(          m_stdScreenOffsetX + 160, m_stdScreenOffsetY + 150);
-	m_vehiclePosition.set(        m_stdScreenOffsetX + 160, m_stdScreenOffsetY + 150);
-	m_repairPosition.set(         m_stdScreenOffsetX + 160, m_stdScreenOffsetY + 150);
-	m_assignmentPosition.set(     m_stdScreenOffsetX + 120, m_stdScreenOffsetY + 150);
-	m_squadPosition.set(          m_stdScreenOffsetX + 160, m_stdScreenOffsetY + 150);
+	m_contractPosition.set(       m_mapScreenOffsetX + 120, m_mapScreenOffsetY +  50);
+	m_attributePosition.set(      m_mapScreenOffsetX + 220, m_mapScreenOffsetY + 150);
+	m_trainPosition.set(          m_mapScreenOffsetX + 160, m_mapScreenOffsetY + 150);
+	m_vehiclePosition.set(        m_mapScreenOffsetX + 160, m_mapScreenOffsetY + 150);
+	m_repairPosition.set(         m_mapScreenOffsetX + 160, m_mapScreenOffsetY + 150);
+	m_assignmentPosition.set(     m_mapScreenOffsetX + 120, m_mapScreenOffsetY + 150);
+	m_squadPosition.set(          m_mapScreenOffsetX + 160, m_mapScreenOffsetY + 150);
 	m_versionPosition.set(        10, m_screenHeight - 15);
 }
 
@@ -143,7 +205,7 @@ UINT16 UILayout::getTacticalTextBoxX() const
 
 	if ( guiCurrentScreen == MAP_SCREEN )
 	{
-		return STD_SCREEN_X + 110;
+		return MAP_ORIGIN_X + 110;
 	}
 	else
 	{
@@ -170,6 +232,9 @@ UINT16 UILayout::getTeamPanelNumSlots() const
 	{
 		throw std::runtime_error("ContentManager is not initialized yet. Unable to determine num of team slots");
 	}
+
+	// Wildfire's team panel graphic has room for exactly ten mercs
+	if (m_wildfireTacticalPanels) return 10;
 
 	int numSlots = std::min({(int)gamepolicy(squad_size), (m_screenWidth - TEAMPANEL_BUTTONSBOX_WIDTH) / TEAMPANEL_SLOT_WIDTH, 12});
 	numSlots = std::max((int)numSlots, 6);

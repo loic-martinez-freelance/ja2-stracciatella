@@ -586,7 +586,10 @@ void SimulateMouseMovement( UINT32 uiNewXPos, UINT32 uiNewYPos )
 	}
 
 	float wx, wy;
-	if (SDL_RenderCoordinatesToWindow(GameRenderer, (float)uiNewXPos, (float)uiNewYPos, &wx, &wy)) {
+	float rx = (float)uiNewXPos;
+	float ry = (float)uiNewYPos;
+	VideoGameToRenderCoordinates(rx, ry);
+	if (SDL_RenderCoordinatesToWindow(GameRenderer, rx, ry, &wx, &wy)) {
 		SDL_WarpMouseInWindow(GAME_WINDOW, (int)wx, (int)wy);
 	} else {
 		// Fallback: use raw coordinates if conversion fails

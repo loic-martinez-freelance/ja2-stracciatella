@@ -21,6 +21,13 @@ void DoSaveLoadMessageBox(const ST::string& str, ScreenID uiExitScreen, MessageB
 
 void DoQuickSave(void);
 void DoAutoSave(void);
+
+/* Extra autosaves when entering a new sector and when a battle starts. They
+ * are only requested at that moment and written by HandlePendingAutoSave()
+ * once the game is idle and may be saved. */
+enum class AutoSaveReason { SECTOR_ENTERED, BATTLE_STARTED };
+void RequestAutoSave(AutoSaveReason reason);
+void HandlePendingAutoSave(void);
 void DoDeadIsDeadSave(void);
 void DoQuickLoad(void);
 

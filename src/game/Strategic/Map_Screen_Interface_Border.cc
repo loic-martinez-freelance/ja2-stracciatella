@@ -9,6 +9,7 @@
 #include "Map_Screen_Interface_Map.h"
 #include "Map_Screen_Interface_Map_Inventory.h"
 #include "MapScreen.h"
+#include "Map_Screen_Interface_Bottom.h"
 #include "MouseSystem.h"
 #include "Object_Cache.h"
 #include "SysUtil.h"
@@ -21,21 +22,32 @@
 struct BUTTON_PICS;
 
 #define MAP_BORDER_FILE INTERFACEDIR "/mbs.sti"
-#define BTN_TOWN_X      (STD_SCREEN_X + 299)
-#define BTN_MINE_X      (STD_SCREEN_X + 342)
-#define BTN_TEAMS_X     (STD_SCREEN_X + 385)
-#define BTN_MILITIA_X   (STD_SCREEN_X + 428)
-#define BTN_AIR_X       (STD_SCREEN_X + 471)
-#define BTN_ITEM_X      (STD_SCREEN_X + 514)
+/* The original layout has the buttons in a row on the map border. Wildfire
+ * has them in two rows of three in its bottom panel (at 261, 647). */
+#define BTN_X(original, wildfire) (MAP_ORIGIN_X + MAP_LAYOUT(original, 261 + (wildfire)))
+#define BTN_Y(wildfire)           (MAP_ORIGIN_Y + MAP_LAYOUT(323, 647 + (wildfire)))
+#define BTN_TOWN_X      BTN_X(299,   8)
+#define BTN_TOWN_Y      BTN_Y(8)
+#define BTN_MINE_X      BTN_X(342,  68)
+#define BTN_MINE_Y      BTN_Y(8)
+#define BTN_TEAMS_X     BTN_X(385, 127)
+#define BTN_TEAMS_Y     BTN_Y(8)
+#define BTN_MILITIA_X   BTN_X(428,   8)
+#define BTN_MILITIA_Y   BTN_Y(63)
+#define BTN_AIR_X       BTN_X(471,  68)
+#define BTN_AIR_Y       BTN_Y(63)
+#define BTN_ITEM_X      BTN_X(514, 127)
+#define BTN_ITEM_Y      BTN_Y(63)
 
-#define MAP_LEVEL_MARKER_X    (STD_SCREEN_X + 565)
-#define MAP_LEVEL_MARKER_Y     (STD_SCREEN_Y + 323)
-#define MAP_LEVEL_MARKER_DELTA   8
-#define MAP_LEVEL_MARKER_WIDTH  55
+// Wildfire: the sky/ground strip in its bottom panel
+#define MAP_LEVEL_MARKER_X    (MAP_ORIGIN_X + MAP_LAYOUT(565, 261 + 199))
+#define MAP_LEVEL_MARKER_Y    (MAP_ORIGIN_Y + MAP_LAYOUT(323, 647 + 14))
+#define MAP_LEVEL_MARKER_DELTA MAP_LAYOUT(8, 23)
+#define MAP_LEVEL_MARKER_WIDTH MAP_LAYOUT(55, 151)
 
 
-#define MAP_BORDER_X (STD_SCREEN_X + 261)
-#define MAP_BORDER_Y (STD_SCREEN_Y + 0)
+#define MAP_BORDER_X (MAP_ORIGIN_X + 261)
+#define MAP_BORDER_Y (MAP_ORIGIN_Y + 0)
 
 
 // mouse levels
@@ -78,7 +90,6 @@ void DeleteMapBorderGraphics( void )
 }
 
 
-static void DisplayCurrentLevelMarker(void);
 
 
 void RenderMapBorder( void )
@@ -92,8 +103,15 @@ void RenderMapBorder( void )
 
 	BltVideoObject(guiSAVEBUFFER, guiMapBorder, 0, MAP_BORDER_X, MAP_BORDER_Y);
 
-	// show the level marker
-	DisplayCurrentLevelMarker( );
+	if (g_ui.m_wildfireMapScreen)
+	{ // the level marker is on the bottom panel, which draws it
+		fMapScreenBottomDirty = TRUE;
+	}
+	else
+	{
+		// show the level marker
+		DisplayCurrentLevelMarker( );
+	}
 }
 
 void RenderMapBorderEtaPopUp( void )
@@ -109,17 +127,17 @@ void RenderMapBorderEtaPopUp( void )
 		return;
 	}
 
-	BltVideoObject(FRAME_BUFFER, guiMapBorderEtaPopUp, 0, MAP_BORDER_X + 215, STD_SCREEN_Y + 291);
+	BltVideoObject(FRAME_BUFFER, guiMapBorderEtaPopUp, 0, MAP_ETA_POPUP_X, MAP_ETA_POPUP_Y);
 
-	InvalidateRegion( MAP_BORDER_X + 215, (STD_SCREEN_Y + 291), MAP_BORDER_X + 215 + 100 , (STD_SCREEN_Y + 310));
+	InvalidateRegion(MAP_ETA_POPUP_X, MAP_ETA_POPUP_Y, MAP_ETA_POPUP_X + 100, MAP_ETA_POPUP_Y + 19);
 }
 
 
-static void MakeButton(UINT idx, UINT gfx, INT16 x, GUI_CALLBACK click, const ST::string& help)
+static void MakeButton(UINT idx, UINT gfx, INT16 x, INT16 y, GUI_CALLBACK click, const ST::string& help)
 {
 	BUTTON_PICS* const img = LoadButtonImage(INTERFACEDIR "/map_border_buttons.sti", gfx, gfx + 9);
 	giMapBorderButtonsImage[idx] = img;
-	GUIButtonRef const btn = QuickCreateButtonNoMove(img, x, (STD_SCREEN_Y + 323), MSYS_PRIORITY_HIGH, click);
+	GUIButtonRef const btn = QuickCreateButtonNoMove(img, x, y, MSYS_PRIORITY_HIGH, click);
 	giMapBorderButtons[idx] = btn;
 	btn->SetFastHelpText(help);
 	btn->SetCursor(MSYS_NO_CURSOR);
@@ -139,12 +157,12 @@ void CreateButtonsForMapBorder(void)
 {
 	// will create the buttons needed for the map screen border region
 
-	MakeButton(MAP_BORDER_TOWN_BTN,     5, BTN_TOWN_X,    BtnTownCallback,     pMapScreenBorderButtonHelpText[0]); // towns
-	MakeButton(MAP_BORDER_MINE_BTN,     4, BTN_MINE_X,    BtnMineCallback,     pMapScreenBorderButtonHelpText[1]); // mines
-	MakeButton(MAP_BORDER_TEAMS_BTN,    3, BTN_TEAMS_X,   BtnTeamCallback,     pMapScreenBorderButtonHelpText[2]); // people
-	MakeButton(MAP_BORDER_MILITIA_BTN,  8, BTN_MILITIA_X, BtnMilitiaCallback,  pMapScreenBorderButtonHelpText[5]); // militia
-	MakeButton(MAP_BORDER_AIRSPACE_BTN, 2, BTN_AIR_X,     BtnAircraftCallback, pMapScreenBorderButtonHelpText[3]); // airspace
-	MakeButton(MAP_BORDER_ITEM_BTN,     1, BTN_ITEM_X,    BtnItemCallback,     pMapScreenBorderButtonHelpText[4]); // items
+	MakeButton(MAP_BORDER_TOWN_BTN,     5, BTN_TOWN_X, BTN_TOWN_Y,    BtnTownCallback,     pMapScreenBorderButtonHelpText[0]); // towns
+	MakeButton(MAP_BORDER_MINE_BTN,     4, BTN_MINE_X, BTN_MINE_Y,    BtnMineCallback,     pMapScreenBorderButtonHelpText[1]); // mines
+	MakeButton(MAP_BORDER_TEAMS_BTN,    3, BTN_TEAMS_X, BTN_TEAMS_Y,   BtnTeamCallback,     pMapScreenBorderButtonHelpText[2]); // people
+	MakeButton(MAP_BORDER_MILITIA_BTN,  8, BTN_MILITIA_X, BTN_MILITIA_Y, BtnMilitiaCallback,  pMapScreenBorderButtonHelpText[5]); // militia
+	MakeButton(MAP_BORDER_AIRSPACE_BTN, 2, BTN_AIR_X, BTN_AIR_Y,     BtnAircraftCallback, pMapScreenBorderButtonHelpText[3]); // airspace
+	MakeButton(MAP_BORDER_ITEM_BTN,     1, BTN_ITEM_X, BTN_ITEM_Y,    BtnItemCallback,     pMapScreenBorderButtonHelpText[4]); // items
 
 	InitializeMapBorderButtonStates( );
 }
@@ -460,7 +478,7 @@ void ToggleItemsFilter( void )
 	}
 }
 
-static void DisplayCurrentLevelMarker(void)
+void DisplayCurrentLevelMarker(void)
 {
 	// display the current level marker on the map border
 /*

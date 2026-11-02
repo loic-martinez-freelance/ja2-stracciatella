@@ -78,8 +78,9 @@
 #include <string_theory/string>
 
 // DEFINES FOR VARIOUS PANELS
-#define SM_ITEMDESC_START_X			214 + INTERFACE_START_X
-#define SM_ITEMDESC_START_Y			1 + INV_INTERFACE_START_Y
+// Wildfire has an area of its own for the item description
+#define SM_ITEMDESC_START_X			(TAC_LAYOUT(214, 565) + INTERFACE_START_X)
+#define SM_ITEMDESC_START_Y			(TAC_LAYOUT(1, 7) + INV_INTERFACE_START_Y)
 #define SM_ITEMDESC_HEIGHT			128
 #define SM_ITEMDESC_WIDTH			314
 
@@ -139,10 +140,11 @@
 #define SM_LOOKB_Y				108
 #define SM_STEALTHMODE_X			187
 #define SM_STEALTHMODE_Y			73
-#define SM_DONE_X				(g_ui.m_teamPanelSlotsTotalWidth + 45)
-#define SM_DONE_Y				4
-#define SM_MAPSCREEN_X				(g_ui.m_teamPanelSlotsTotalWidth + 91)
-#define SM_MAPSCREEN_Y				4
+// Wildfire: in the box right of the item description area
+#define SM_DONE_X				(g_ui.m_teamPanelSlotsTotalWidth + TAC_LAYOUT(45, 97))
+#define SM_DONE_Y				TAC_LAYOUT(4, 3)
+#define SM_MAPSCREEN_X				(g_ui.m_teamPanelSlotsTotalWidth + TAC_LAYOUT(91, 142))
+#define SM_MAPSCREEN_Y				TAC_LAYOUT(4, 3)
 
 
 #define SM_PERCENT_WIDTH			20
@@ -883,7 +885,7 @@ void InitializeSMPanel()
 	// minimap are in the bottom-right corner.
 	SGPVObject* voSMPanel = AddVideoObjectFromFile(INTERFACEDIR "/inventory_bottom_panel.sti");
 	guiSMPanel = new SGPVSurface(g_ui.m_teamPanelWidth, INV_INTERFACE_HEIGHT, PIXEL_DEPTH);
-	if (g_ui.m_teamPanelWidth > 640)
+	if (g_ui.m_teamPanelWidth > 640 && !g_ui.m_wildfireTacticalPanels)
 	{
 		// The team panel is longer than default
 		// need a second blit, and we will start from the right
@@ -893,7 +895,8 @@ void InitializeSMPanel()
 	BltVideoObject(guiSMPanel, voSMPanel, 0, 0, 0);
 	DeleteVideoObject(voSMPanel);
 
-	INT16 sFillerWidth = g_ui.m_teamPanelWidth - 640;
+	// Wildfire's graphic is already as wide as the team panel
+	INT16 sFillerWidth = g_ui.m_wildfireTacticalPanels ? 0 : g_ui.m_teamPanelWidth - 640;
 	if (sFillerWidth > 0)
 	{
 		// draw a space filler if needed
@@ -2287,10 +2290,11 @@ void InitializeTEAMPanel()
 
 	auto vsTEAMPanel = CreateVideoSurfaceFromObjectFile(INTERFACEDIR "/bottom_bar.sti", 0);
 	BltVideoSurface(guiTEAMPanel, vsTEAMPanel.get(), 0, 0, NULL);
-	for (int i = 6; i < NUM_TEAM_SLOTS; i++)
+	// Wildfire's graphic already has all slots
+	if (!g_ui.m_wildfireTacticalPanels) for (int i = 6; i < NUM_TEAM_SLOTS; i++)
 	{	// extend the panel if needed
 		SGPBox const rect = {5 * TEAMPANEL_SLOT_WIDTH, 0,
-					TEAMPANEL_SLOT_WIDTH + TEAMPANEL_BUTTONSBOX_WIDTH, TEAMPANEL_HEIGHT};
+					static_cast<UINT16>(TEAMPANEL_SLOT_WIDTH + TEAMPANEL_BUTTONSBOX_WIDTH), TEAMPANEL_HEIGHT};
 		BltVideoSurface(guiTEAMPanel, vsTEAMPanel.get(), i * TEAMPANEL_SLOT_WIDTH, 0, &rect);
 	}
 
@@ -3222,8 +3226,8 @@ void RenderTownIDString(void)
 	SetFontAttributes(COMPFONT, 183);
 	ST::string zTownIDString = GetSectorIDString(gWorldSector, TRUE);
 	zTownIDString = ReduceStringLength(zTownIDString, 80, COMPFONT);
-	MPrint(INTERFACE_START_X + g_ui.m_teamPanelSlotsTotalWidth + 50,
-		SCREEN_HEIGHT - 55, zTownIDString, HCenterVCenterAlign(80, 16));
+	MPrint(INTERFACE_START_X + g_ui.m_teamPanelSlotsTotalWidth + TAC_LAYOUT(50, 102),
+		SCREEN_HEIGHT - TAC_LAYOUT(55, 58), zTownIDString, HCenterVCenterAlign(80, 16));
 }
 
 

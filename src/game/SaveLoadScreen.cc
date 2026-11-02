@@ -1,4 +1,9 @@
 #include "Directories.h"
+#include "WorldDef.h"
+#include "Logger.h"
+#include "Dialogue_Control.h"
+#include "Tactical_Placement_GUI.h"
+#include "Map_Information.h"
 #include "Font.h"
 #include "GameLoop.h"
 #include "HImage.h"
@@ -1336,6 +1341,69 @@ void DoQuickSave()
 		}
 	}
 }
+
+// autosave slots of the extra autosaves (1 and 2 are used at the end of a turn)
+static UINT32 const AUTOSAVE_SLOT_SECTOR = 3;
+static UINT32 const AUTOSAVE_SLOT_BATTLE = 4;
+
+static bool g_autosave_sector_pending = false;
+static bool g_autosave_battle_pending = false;
+
+
+void RequestAutoSave(AutoSaveReason const reason)
+{
+	// Dead is Dead has a single save slot, which is handled by the game itself
+	if (gGameOptions.ubGameSaveMode == DIF_DEAD_IS_DEAD) return;
+
+	switch (reason)
+	{
+		case AutoSaveReason::SECTOR_ENTERED: g_autosave_sector_pending = true; break;
+		case AutoSaveReason::BATTLE_STARTED: g_autosave_battle_pending = true; break;
+	}
+}
+
+
+static bool IsGameIdleForAutoSave()
+{
+	if (guiCurrentScreen != GAME_SCREEN && guiCurrentScreen != MAP_SCREEN) return false;
+	if (guiPendingScreen != NO_PENDING_SCREEN)                           return false;
+	if (!gfWorldLoaded)                                                   return false;
+	if (gfTacticalPlacementGUIActive || gfPreBattleInterfaceActive)       return false;
+	if (fDisableMapInterfaceDueToBattle)                                  return false;
+	if (gTacticalStatus.uiFlags & (ENGAGED_IN_CONV | LOADING_SAVED_GAME)) return false;
+	if (!DialogueQueueIsEmpty())                                          return false;
+	if (gTacticalStatus.uiFlags & INCOMBAT)
+	{ // only at the player's turn, when nothing is going on
+		if (gTacticalStatus.ubCurrentTeam != OUR_TEAM) return false;
+		if (gTacticalStatus.ubAttackBusyCount != 0)    return false;
+	}
+	return CanGameBeSaved();
+}
+
+
+void HandlePendingAutoSave()
+{
+	if (!g_autosave_sector_pending && !g_autosave_battle_pending) return;
+	if (!IsGameIdleForAutoSave()) return;
+
+	ScreenID const previous = guiPreviousOptionScreen;
+	guiPreviousOptionScreen = guiCurrentScreen;
+	ST::string const sector = GetSectorIDString(gWorldSector, FALSE);
+	if (g_autosave_sector_pending)
+	{
+		g_autosave_sector_pending = false;
+		ST::string const name = GetAutoSaveName(AUTOSAVE_SLOT_SECTOR);
+		if (!SaveGame(name, ST::format("Entered {}", sector))) SLOGE("Autosave {} failed", name);
+	}
+	if (g_autosave_battle_pending)
+	{
+		g_autosave_battle_pending = false;
+		ST::string const name = GetAutoSaveName(AUTOSAVE_SLOT_BATTLE);
+		if (!SaveGame(name, ST::format("Battle in {}", sector))) SLOGE("Autosave {} failed", name);
+	}
+	guiPreviousOptionScreen = previous;
+}
+
 
 void DoAutoSave()
 {

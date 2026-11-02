@@ -104,7 +104,7 @@ void DisplayLoadScreenWithID(UINT8 const id)
 
 	try
 	{ // Blit the background image.
-		BltVideoSurfaceOnce(FRAME_BUFFER, filename.c_str(), STD_SCREEN_X, STD_SCREEN_Y);
+		BltBackgroundImageOnce(FRAME_BUFFER, filename.c_str(), STD_SCREEN_X, STD_SCREEN_Y);
 	}
 	catch (...)
 	{ // Failed to load the file, so use a black screen and print out message.

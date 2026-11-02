@@ -9,6 +9,7 @@
 #include "GameSettings.h"
 #include "GameLoop.h"
 #include "GameVersion.h"
+#include "HImage.h"
 #include "Input.h"
 #include "JA2_Splash.h"
 #include "JAScreens.h"
@@ -25,11 +26,13 @@
 #include "Text.h"
 #include "Timer_Control.h"
 #include "VObject.h"
+#include "VObject_Blitters.h"
 #include "VSurface.h"
 #include "Video.h"
 #include "WordWrap.h"
 #include "UILayout.h"
 
+#include <algorithm>
 #include <string_theory/format>
 
 
@@ -367,8 +370,31 @@ static void CreateDestroyMainMenuButtons(BOOLEAN fCreate)
 
 static void RenderMainMenu(void)
 {
-	BltVideoObject(FRAME_BUFFER, guiMainMenuBackGroundImage, 0, STD_SCREEN_X,       STD_SCREEN_Y     );
-	BltVideoObject(FRAME_BUFFER, guiJa2LogoImage,            0, STD_SCREEN_X + 188, STD_SCREEN_Y + 15);
+	SGPVObject const* const background = GetVObject(guiMainMenuBackGroundImage);
+	ETRLEObject const& bg = background->SubregionProperties(0);
+	if (bg.usWidth <= 640 && bg.usHeight <= 480)
+	{
+		BltVideoObject(FRAME_BUFFER, background,      0, STD_SCREEN_X,       STD_SCREEN_Y     );
+		BltVideoObject(FRAME_BUFFER, guiJa2LogoImage, 0, STD_SCREEN_X + 188, STD_SCREEN_Y + 15);
+		return;
+	}
+
+	// High resolution artwork (Wildfire ships a 1024x768 background and a
+	// logo as wide as it). Compose the menu at its native size, then fit it
+	// to the screen instead of cropping it.
+	SGPVSurface composed(bg.usWidth, bg.usHeight, 16);
+	composed.Fill(0);
+	SGPRect clip;
+	clip.set(0, 0, bg.usWidth, bg.usHeight);
+	SGPRect const old_clip = SetClippingRect(clip);
+	BltVideoObject(&composed, background, 0, -bg.sOffsetX, -bg.sOffsetY);
+	SGPVObject const* const logo = GetVObject(guiJa2LogoImage);
+	ETRLEObject const& lg = logo->SubregionProperties(0);
+	BltVideoObject(&composed, logo, 0, (bg.usWidth - lg.usWidth) / 2 - lg.sOffsetX, -lg.sOffsetY);
+	SetClippingRect(old_clip);
+
+	BltVideoSurfaceSmoothScaled(FRAME_BUFFER, &composed,
+		FitImageToScreen(bg.usWidth, bg.usHeight, std::max<UINT16>(640, std::min(SCREEN_WIDTH, bg.usWidth)), std::max<UINT16>(480, std::min(SCREEN_HEIGHT, bg.usHeight))));
 }
 
 void RenderGameVersion() {

@@ -139,6 +139,15 @@ static void MainLoop()
 				case SDL_EVENT_FINGER_DOWN:
 				case SDL_EVENT_FINGER_UP:
 					SDL_ConvertEventToRenderCoordinates(GameRenderer, &event);
+					// a part of the screen may be shown zoomed (e.g. the laptop)
+					if (event.type == SDL_EVENT_MOUSE_MOTION)
+					{
+						VideoRenderToGameCoordinates(event.motion.x, event.motion.y);
+					}
+					else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP)
+					{
+						VideoRenderToGameCoordinates(event.button.x, event.button.y);
+					}
 					break;
 				default:
 					break;
@@ -372,6 +381,12 @@ int main(int argc, char* argv[])
 
 		////////////////////////////////////////////////////////////
 
+	#ifdef __APPLE__
+		/* Full screen without a separate macOS Space: the window covers the
+		 * display and the Dock and menu bar stay hidden, instead of the Dock
+		 * sliding in when the mouse reaches the bottom of the screen. */
+		SDL_SetHint(SDL_HINT_VIDEO_MAC_FULLSCREEN_SPACES, "0");
+	#endif
 		SDL_Init(SDL_INIT_VIDEO);
 
 		// restore output to the console (on windows when built with MINGW)
@@ -403,6 +418,7 @@ int main(int argc, char* argv[])
 
 		GCM = cm;
 
+		g_ui.detectMapScreenLayout();
 		g_ui.recalculatePositions();
 
 		SLOGD("Initializing Video Manager");

@@ -1338,6 +1338,24 @@ static void ToggleZBuffer(void);
 static void ToggleMapEdgepoints(void);
 
 
+// Multi-select every controllable merc in the sector (real-time only, like
+// rubber-band selection). Vehicles and their occupants are skipped.
+static void SelectAllMercsInSector()
+{
+	if (gTacticalStatus.uiFlags & INCOMBAT) return;
+
+	FOR_EACH_IN_TEAM(s, OUR_TEAM)
+	{
+		if (!OkControllableMerc(s))
+			continue;
+		if (s->uiStatusFlags & (SOLDIER_VEHICLE | SOLDIER_PASSENGER | SOLDIER_DRIVER))
+			continue;
+		s->uiStatusFlags |= SOLDIER_MULTI_SELECTED;
+	}
+	EndMultiSoldierSelection(TRUE);
+}
+
+
 static void HandleModNone(UINT32 const key, UIEventKind* const new_event)
 {
 	switch (key)
@@ -1418,17 +1436,9 @@ static void HandleModNone(UINT32 const key, UIEventKind* const new_event)
 				if (_KeyDown(SDLK_END))
 					ChangeSizeOfLOS(gGameSettings.ubSizeOfLOS + 1);
 			}
-			else if (!(gTacticalStatus.uiFlags & INCOMBAT))
-			{ // ATE: This key will select everybody in the sector
-				FOR_EACH_IN_TEAM(s, OUR_TEAM)
-				{
-					if (!OkControllableMerc(s))
-						continue;
-					if (s->uiStatusFlags & (SOLDIER_VEHICLE | SOLDIER_PASSENGER | SOLDIER_DRIVER))
-						continue;
-					s->uiStatusFlags |= SOLDIER_MULTI_SELECTED;
-				}
-				EndMultiSoldierSelection(TRUE);
+			else
+			{
+				SelectAllMercsInSector();
 			}
 			break;
 
@@ -1553,6 +1563,8 @@ static void HandleModNone(UINT32 const key, UIEventKind* const new_event)
 			break;
 
 		case 'p': HandleStanceChangeFromUIKeys(ANIM_PRONE); break;
+
+		case 'q': SelectAllMercsInSector(); break;
 
 		case 'r':
 		{

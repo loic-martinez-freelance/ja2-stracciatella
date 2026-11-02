@@ -59,6 +59,9 @@ class SGPVSurface
 		 * If the 2 images are not 16 Bpp, it returns false. */
 		friend void BltStretchVideoSurface(SGPVSurface* dst, SGPVSurface const* src, SGPBox const* src_rect, SGPBox const* dst_rect);
 
+		/* Blit the whole source surface into dst_rect using smooth (linear) scaling. */
+		friend void BltVideoSurfaceSmoothScaled(SGPVSurface* dst, SGPVSurface* src, SGPBox const& dst_rect);
+
 	private:
 		SurfaceUniquePtr                           surface_;
 	public:
@@ -127,10 +130,20 @@ inline SGPVSurface* AddVideoSurface(UINT16 Width, UINT16 Height, UINT8 BitDepth)
 
 SGPVSurface* AddVideoSurfaceFromFile(const char* Filename);
 
+/* Load an image into an 8 bpp video surface. 16 bpp images are reduced to a
+ * 256 colour palette and every pixel is scaled up by the given factor. Used to
+ * load data of game versions which ship 16 bpp images where the engine needs a
+ * palette (e.g. the strategic map of Jagged Alliance 2: Wildfire). */
+SGPVSurface* AddVideoSurfaceFromFileAs8BPP(const char* Filename, UINT8 scale);
+
 /* Blits a video surface in half size to another video surface.
  * If SrcRect is NULL the entire source surface is blitted.
  * Only blitting from 8bbp surfaces to 16bpp surfaces is supported. */
 void BltVideoSurfaceHalf(SGPVSurface* dst, SGPVSurface* src, INT32 DestX, INT32 DestY, SGPBox const* src_rect);
+
+/* Blit an 8 bpp surface onto a 16 bpp one at full size, using the source's
+ * current 16 bpp palette (which may be swapped for shading). */
+void BltVideoSurfacePalettized(SGPVSurface* dst, SGPVSurface* src, INT32 DestX, INT32 DestY, SGPBox const* src_rect);
 
 // Deletes all data, including palettes
 void DeleteVideoSurface(SGPVSurface const * vs);
@@ -139,6 +152,15 @@ void BltVideoSurfaceOnce(SGPVSurface* dst, const char* filename, INT32 x, INT32 
 
 /** Draw image on the video surface stretching the image if necessary. */
 void BltVideoSurfaceOnceWithStretch(SGPVSurface* const dst, const char* const filename);
+
+/* Box of at most max_w x max_h with the aspect ratio of a w x h image, centered on the screen. */
+SGPBox FitImageToScreen(UINT16 w, UINT16 h, UINT16 max_w, UINT16 max_h);
+
+/* Draw a background image. Images larger than the standard 640x480 interface
+ * area (e.g. the 1024x768 artwork of Jagged Alliance 2: Wildfire) are shown
+ * at native size if the screen is large enough and scaled down otherwise,
+ * instead of being cropped. */
+void BltBackgroundImageOnce(SGPVSurface* dst, const char* filename, INT32 std_x, INT32 std_y);
 
 /** Fill video surface with another one with stretch. */
 void FillVideoSurfaceWithStretch(SGPVSurface* const dst, SGPVSurface* const src);

@@ -28,6 +28,15 @@ void VideoSetBrightness(float brightness);
  * manager */
 void VideoToggleFullScreen(void);
 
+/* Show only the given area of the screen, scaled up to fill the window (keeping
+ * its aspect ratio), e.g. the 640x480 laptop on a bigger screen. nullptr shows
+ * the whole screen. Mouse coordinates are mapped accordingly. */
+void VideoSetZoomedArea(SGPBox const* area);
+/* Map a point in render (logical) coordinates to game screen coordinates and
+ * back, taking the zoomed area into account. */
+void VideoRenderToGameCoordinates(float& x, float& y);
+void VideoGameToRenderCoordinates(float& x, float& y);
+
 void SetMouseCursorProperties(INT16 sOffsetX, INT16 sOffsetY, UINT16 usCursorHeight, UINT16 usCursorWidth);
 
 void InvalidateRegionEx(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom);
