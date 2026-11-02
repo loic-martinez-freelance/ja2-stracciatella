@@ -1728,6 +1728,12 @@ static void ManSeesMan(SOLDIERTYPE& s, SOLDIERTYPE& opponent, UINT8 const caller
 		}
 		else if (s.bTeam == OUR_TEAM)
 		{
+			// Remember the character for the sector people list (Ctrl+P)
+			if (opponent.ubProfile < NUM_PROFILES)
+			{
+				GetProfile(opponent.ubProfile).ubMiscFlags2 |= PROFILE_MISC_FLAG2_SEEN_BY_PLAYER;
+			}
+
 			switch (opponent.ubProfile)
 			{
 				case MIKE:

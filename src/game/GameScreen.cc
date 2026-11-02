@@ -29,6 +29,7 @@
 #include "Faces.h"
 #include "StrategicMap.h"
 #include "GameScreen.h"
+#include "Sector_People_List.h"
 #include "Cursor_Control.h"
 #include "Strategic_Turns.h"
 #include "Merc_Entering.h"
@@ -206,6 +207,8 @@ void LeaveTacticalScreen(ScreenID const uiNewScreen)
 void InternalLeaveTacticalScreen(ScreenID const uiNewScreen)
 {
 	gpCustomizableTimerCallback = NULL;
+
+	RemoveSectorPeopleList();
 
 	// unload the sector they teleported out of
 	if ( !gfAutomaticallyStartAutoResolve )

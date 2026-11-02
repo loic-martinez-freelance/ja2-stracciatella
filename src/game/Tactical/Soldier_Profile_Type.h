@@ -38,6 +38,7 @@
 #define PROFILE_MISC_FLAG2_NEEDS_TO_SAY_HOSTILE_QUOTE		0x10
 #define PROFILE_MISC_FLAG2_MARRIED_TO_HICKS			0x20
 #define PROFILE_MISC_FLAG2_ASKED_BY_HICKS			0x40
+#define PROFILE_MISC_FLAG2_SEEN_BY_PLAYER			0x80 // A merc of the player has seen this character
 
 #define PROFILE_MISC_FLAG3_PLAYER_LEFT_MSG_FOR_MERC_AT_AIM	0x01 // In the aimscreen, the merc was away and the player left a message
 #define PROFILE_MISC_FLAG3_PERMANENT_INSERTION_CODE		0x02

@@ -54,6 +54,7 @@ set(LOCAL_JA2_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/QArray.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Real_Time_Input.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Rotting_Corpses.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/Sector_People_List.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ShopKeeper_Interface.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/SkillCheck.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Soldier_Add.cc

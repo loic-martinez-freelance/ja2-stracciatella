@@ -77,6 +77,7 @@
 #include "ContentManager.h"
 #include "GameInstance.h"
 #include "Soldier.h"
+#include "Sector_People_List.h"
 #include "policy/GamePolicy.h"
 
 #include <string_theory/format>
@@ -1885,6 +1886,13 @@ static void HandleModCtrl(UINT32 const key, UIEventKind* const new_event)
 			break;
 
 		case 'o': if (CHEATER_CHEAT_LEVEL()) CreatePlayerControlledMonster(); break;
+
+		case 'p':
+			if (!GameMode::getInstance()->isEditorMode())
+			{
+				ToggleSectorPeopleList();
+			}
+			break;
 
 		case 'q':
 			if (gamepolicy(isHotkeyEnabled(UI_Tactical, HKMOD_CTRL, 'q')))
