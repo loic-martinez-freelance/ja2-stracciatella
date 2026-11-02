@@ -45,9 +45,12 @@
 #include "VObject.h"
 #include "VObject_Blitters.h"
 #include "VSurface.h"
+#include "Local.h"
 #include "World_Items.h"
 #include "WorldDef.h"
 #include <string_theory/string>
+#include <algorithm>
+#include <memory>
 
 extern SOLDIERINITNODE *gpSelected;
 
@@ -224,6 +227,118 @@ static INT16 GetOffsetLandHeight(INT32 const gridno)
 }
 
 
+// Wildfire: the 640x320 map is rendered at STD_SCREEN_X/Y as usual and then
+// shown scaled up to fill the window of the (widened) frame.
+static bool OverheadMapIsScaled()
+{
+	return g_ui.m_wildfireTacticalPanels && !gfEditMode;
+}
+
+
+// where the map is rendered
+static SGPBox OverheadMapRenderBox()
+{
+	return SGPBox{ UINT16(STD_SCREEN_X), UINT16(STD_SCREEN_Y), 640, 320 };
+}
+
+
+// where the map is shown
+static SGPBox OverheadMapDisplayBox()
+{
+	if (!OverheadMapIsScaled()) return OverheadMapRenderBox();
+	INT32 const wx = OVERHEAD_FRAME_X + 4;
+	INT32 const wy = OVERHEAD_FRAME_Y + 4;
+	INT32 const ww = OVERHEAD_FRAME_WIDTH - 8;
+	INT32 const wh = OVERHEAD_PANEL_Y - wy;
+	float const scale = std::max(1.0f, std::min(ww / 640.0f, wh / 320.0f));
+	UINT16 const w = UINT16(640 * scale);
+	UINT16 const h = UINT16(320 * scale);
+	return SGPBox{ UINT16(wx + (ww - w) / 2), UINT16(wy + (wh - h) / 2), w, h };
+}
+
+
+// render coordinates -> screen coordinates
+static void OverheadMapToScreen(INT16& x, INT16& y)
+{
+	SGPBox const r = OverheadMapRenderBox();
+	SGPBox const d = OverheadMapDisplayBox();
+	x = INT16(d.x + (x - r.x) * d.w / r.w);
+	y = INT16(d.y + (y - r.y) * d.h / r.h);
+}
+
+
+void GetOverheadMapMousePos(INT16* const x, INT16* const y)
+{
+	SGPBox const r = OverheadMapRenderBox();
+	SGPBox const d = OverheadMapDisplayBox();
+	*x = INT16(r.x + (gusMouseXPos - d.x) * r.w / d.w);
+	*y = INT16(r.y + (gusMouseYPos - d.y) * r.h / d.h);
+}
+
+
+// The part of the frame buffer the map is rendered to is restored from the
+// save buffer every frame, so that the overlays drawn there each frame can
+// be scaled up along with the map.
+static void RestoreOverheadMapRenderArea()
+{
+	if (!OverheadMapIsScaled()) return;
+	SGPBox const r = OverheadMapRenderBox();
+	BltVideoSurface(FRAME_BUFFER, guiSAVEBUFFER, r.x, r.y, &r);
+}
+
+
+static void ShowOverheadMapScaled()
+{
+	if (!OverheadMapIsScaled()) return;
+	static std::unique_ptr<SGPVSurface> map;
+	if (!map) map = std::make_unique<SGPVSurface>(640, 320, PIXEL_DEPTH);
+	SGPBox const r = OverheadMapRenderBox();
+	SGPBox const d = OverheadMapDisplayBox();
+	BltVideoSurface(map.get(), FRAME_BUFFER, 0, 0, &r);
+	BltVideoSurfaceSmoothScaled(FRAME_BUFFER, map.get(), d);
+	InvalidateRegion(d.x, d.y, d.x + d.w, d.y + d.h);
+}
+
+
+// Wildfire's frame (map_bord.sti) widened to the screen width: the 4 pixel
+// border around the map window and the bar below it.
+static void RenderOverheadMapFrame()
+{
+	if (!OverheadMapIsScaled() || OVERHEAD_FRAME_WIDTH == 1024)
+	{
+		BltVideoObject(FRAME_BUFFER, uiOVERMAP, 0, OVERHEAD_FRAME_X, OVERHEAD_FRAME_Y);
+		return;
+	}
+	static PixelImage16 frame;
+	if (frame.w != OVERHEAD_FRAME_WIDTH)
+	{
+		SGPVObject const* const vo = GetVObject(uiOVERMAP);
+		ETRLEObject const& e = vo->SubregionProperties(0);
+		SGPVSurface tmp(e.usWidth, e.usHeight, PIXEL_DEPTH);
+		BltVideoObject(&tmp, vo, 0, -e.sOffsetX, -e.sOffsetY);
+		frame = ResizeSeamless(ReadPixels16(&tmp), OVERHEAD_FRAME_WIDTH, e.usWidth / 2, e.usWidth / 2 - 100, true);
+	}
+	// everything but the map window
+	INT32 const window_bottom = OVERHEAD_PANEL_Y - OVERHEAD_FRAME_Y;
+	PixelImage16 part;
+	auto const write = [&](INT32 const x, INT32 const y, INT32 const w, INT32 const h)
+	{
+		part.w = w;
+		part.h = h;
+		part.px.resize(w * h);
+		for (INT32 iy = 0; iy < h; ++iy)
+		{
+			for (INT32 ix = 0; ix < w; ++ix) part.at(ix, iy) = frame.at(x + ix, y + iy);
+		}
+		WritePixels16(FRAME_BUFFER, part, OVERHEAD_FRAME_X + x, OVERHEAD_FRAME_Y + y);
+	};
+	write(0, 0, frame.w, 4);
+	write(0, 4, 4, window_bottom - 4);
+	write(frame.w - 4, 4, 4, window_bottom - 4);
+	write(0, window_bottom, frame.w, frame.h - window_bottom);
+}
+
+
 static void GetOverheadScreenXYFromGridNo(INT16 const gridno, INT16* const out_x, INT16* const out_y)
 {
 	GetAbsoluteScreenXYFromMapPos(gridno, out_x, out_y);
@@ -252,6 +367,7 @@ static void DisplayMercNameInOverhead(SOLDIERTYPE const& s)
 	y += STD_SCREEN_Y;
 
 	y -= s.sHeightAdjustment / 5 + 13;
+	OverheadMapToScreen(x, y);
 
 	INT16 sX;
 	INT16 sY;
@@ -283,6 +399,7 @@ void HandleOverheadMap(void)
 	}
 
 	RenderOverheadMap(0, WORLD_COLS / 2, STD_SCREEN_X, STD_SCREEN_Y, STD_SCREEN_X + 640, STD_SCREEN_Y + 320, FALSE);
+	RestoreOverheadMapRenderArea();
 
 	HandleTalkingAutoFaces();
 
@@ -307,6 +424,11 @@ void HandleOverheadMap(void)
 		}
 	}
 
+	// item pools under the mouse; their lists are drawn after the map has been
+	// scaled up, as they are not part of it
+	ITEM_POOL const* ground_pool = NULL;
+	INT8             ground_z    = 0;
+	ITEM_POOL const* roof_pool   = NULL;
 	if (!gfEditMode && !gfTacticalPlacementGUIActive)
 	{
 		HandleAnyMercInSquadHasCompatibleStuff(NULL);
@@ -324,7 +446,8 @@ void HandleOverheadMap(void)
 				INT8             const bZLevel   = GetZLevelOfItemPoolGivenStructure(usMapPos, 0, structure);
 				if (AnyItemsVisibleOnLevel(pItemPool, bZLevel))
 				{
-					DrawItemPoolList(pItemPool, bZLevel, gusMouseXPos, gusMouseYPos);
+					ground_pool = pItemPool;
+					ground_z    = bZLevel;
 					gsOveritemPoolGridNo = GetWorldItem(pItemPool->iItemIndex).sGridNo;
 				}
 			}
@@ -335,7 +458,7 @@ void HandleOverheadMap(void)
 				const INT8 bZLevel = 0;
 				if (AnyItemsVisibleOnLevel(pItemPool, bZLevel))
 				{
-					DrawItemPoolList(pItemPool, bZLevel, gusMouseXPos, gusMouseYPos - 5);
+					roof_pool = pItemPool;
 					gsOveritemPoolGridNo = GetWorldItem(pItemPool->iItemIndex).sGridNo;
 				}
 			}
@@ -343,6 +466,10 @@ void HandleOverheadMap(void)
 	}
 
 	RenderOverheadOverlays();
+	ShowOverheadMapScaled();
+
+	if (ground_pool) DrawItemPoolList(ground_pool, ground_z, gusMouseXPos, gusMouseYPos);
+	if (roof_pool)   DrawItemPoolList(roof_pool,   0,        gusMouseXPos, gusMouseYPos - 5);
 
 	if (!gfEditMode && !gfTacticalPlacementGUIActive)
 	{
@@ -385,7 +512,8 @@ void GoIntoOverheadMap( )
 
 	MSYS_DefineRegion(&OverheadBackgroundRegion, OVERHEAD_FRAME_X, OVERHEAD_FRAME_Y, OVERHEAD_FRAME_X + OVERHEAD_FRAME_WIDTH, OVERHEAD_FRAME_Y + OVERHEAD_FRAME_HEIGHT,MSYS_PRIORITY_HIGH, CURSOR_NORMAL, MSYS_NO_CALLBACK, MSYS_NO_CALLBACK);
 
-	MSYS_DefineRegion(&OverheadRegion, STD_SCREEN_X, STD_SCREEN_Y, STD_SCREEN_X + 640, STD_SCREEN_Y + 320, MSYS_PRIORITY_HIGH, CURSOR_NORMAL, MSYS_NO_CALLBACK, MouseCallbackPrimarySecondary(ClickOverheadRegionCallbackPrimary, ClickOverheadRegionCallbackSecondary));
+	SGPBox const map = OverheadMapDisplayBox();
+	MSYS_DefineRegion(&OverheadRegion, map.x, map.y, map.x + map.w, map.y + map.h, MSYS_PRIORITY_HIGH, CURSOR_NORMAL, MSYS_NO_CALLBACK, MouseCallbackPrimarySecondary(ClickOverheadRegionCallbackPrimary, ClickOverheadRegionCallbackSecondary));
 
 	// Add shades to persons....
 	SGPVObject*            const vo  = GetVObject(uiPERSONS);
@@ -730,7 +858,7 @@ void RenderOverheadMap(INT16 const sStartPointX_M, INT16 const sStartPointY_M, I
 
 	if (!fFromMapUtility)
 	{ // Render border!
-		BltVideoObject(FRAME_BUFFER, uiOVERMAP, 0, OVERHEAD_FRAME_X, OVERHEAD_FRAME_Y);
+		RenderOverheadMapFrame();
 	}
 
 	// Update the save buffer
@@ -880,8 +1008,11 @@ static GridNo InternalGetOverheadMouseGridNo(const INT dy)
 	if (!(OverheadRegion.uiFlags & MSYS_MOUSE_IN_AREA)) return NOWHERE;
 
 	// ATE: Adjust alogrithm values a tad to reflect map positioning
-	INT16 const sWorldScreenX = (gusMouseXPos - STD_SCREEN_X - gsStartRestrictedX -  5) * 5;
-	INT16       sWorldScreenY = (gusMouseYPos - STD_SCREEN_Y - gsStartRestrictedY + dy) * 5;
+	INT16 mouse_x;
+	INT16 mouse_y;
+	GetOverheadMapMousePos(&mouse_x, &mouse_y);
+	INT16 const sWorldScreenX = (mouse_x - STD_SCREEN_X - gsStartRestrictedX -  5) * 5;
+	INT16       sWorldScreenY = (mouse_y - STD_SCREEN_Y - gsStartRestrictedY + dy) * 5;
 
 	// Get new proposed center location.
 	const GridNo grid_no = GetMapPosFromAbsoluteScreenXY(sWorldScreenX, sWorldScreenY);

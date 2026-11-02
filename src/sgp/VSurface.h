@@ -4,6 +4,7 @@
 #include "SDL_helpers.h"
 #include "Types.h"
 #include <memory>
+#include <vector>
 #include "SDL3/SDL.h"
 
 
@@ -164,5 +165,36 @@ void BltBackgroundImageOnce(SGPVSurface* dst, const char* filename, INT32 std_x,
 
 /** Fill video surface with another one with stretch. */
 void FillVideoSurfaceWithStretch(SGPVSurface* const dst, SGPVSurface* const src);
+
+/* Fill the areas left and right of an image already drawn into the 16 bpp
+ * surface dst at box with a mirrored copy of the image's side edges, softened
+ * and darkened towards the outer border of the surface. Used to cover the
+ * margins of a widescreen display instead of leaving them black. */
+void FillSideMarginsWithMirroredImage(SGPVSurface* dst, SGPBox const& box);
+
+/* A copy of the pixels of (part of) a 16 bpp surface, for image manipulation. */
+struct PixelImage16
+{
+	INT32 w = 0;
+	INT32 h = 0;
+	std::vector<UINT16> px;
+
+	UINT16  at(INT32 x, INT32 y) const { return px[y * w + x]; }
+	UINT16& at(INT32 x, INT32 y)       { return px[y * w + x]; }
+};
+
+/* Copy the area box (the whole surface if null) of a 16 bpp surface. */
+PixelImage16 ReadPixels16(SGPVSurface* src, SGPBox const* box = nullptr);
+
+/* Write an image into a 16 bpp surface at x, y (clipped to the surface). */
+void WritePixels16(SGPVSurface* dst, PixelImage16 const& img, INT32 x, INT32 y);
+
+/* Return img resized to new_len pixels along one axis without scaling it:
+ * when growing, the area around split is extended with mirrored copies of
+ * the pixels at most reach pixels on either side of it; when shrinking,
+ * pixels around split are left out. The joins are cross-faded so that no
+ * seam shows. Meant for widening panels made of a frame around a textured
+ * area, with split and reach inside that area. */
+PixelImage16 ResizeSeamless(PixelImage16 const& img, INT32 new_len, INT32 split, INT32 reach, bool horizontal);
 
 #endif

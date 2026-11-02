@@ -430,26 +430,29 @@ void TacticalPlacementHandle()
 		}
 	}
 	gfValidCursor = FALSE;
+	INT16 mouse_x;
+	INT16 mouse_y;
+	GetOverheadMapMousePos(&mouse_x, &mouse_y);
 	if( gbSelectedMercID != -1
-		&& (gusMouseYPos >= STD_SCREEN_Y) && (gusMouseYPos < STD_SCREEN_Y + 320)
-		&& (gusMouseXPos >= STD_SCREEN_X) && (gusMouseXPos < STD_SCREEN_X + 640) )
+		&& (mouse_y >= STD_SCREEN_Y) && (mouse_y < STD_SCREEN_Y + 320)
+		&& (mouse_x >= STD_SCREEN_X) && (mouse_x < STD_SCREEN_X + 640) )
 	{
 		switch( gMercPlacement[ gbCursorMercID ].ubStrategicInsertionCode )
 		{
 			case INSERTION_CODE_NORTH:
-				if( gusMouseYPos <= (STD_SCREEN_Y + 40) )
+				if( mouse_y <= (STD_SCREEN_Y + 40) )
 					gfValidCursor = TRUE;
 				break;
 			case INSERTION_CODE_EAST:
-				if( gusMouseXPos >= (STD_SCREEN_X + 600) )
+				if( mouse_x >= (STD_SCREEN_X + 600) )
 					gfValidCursor = TRUE;
 				break;
 			case INSERTION_CODE_SOUTH:
-				if( gusMouseYPos >= (STD_SCREEN_Y + 280) )
+				if( mouse_y >= (STD_SCREEN_Y + 280) )
 					gfValidCursor = TRUE;
 				break;
 			case INSERTION_CODE_WEST:
-				if( gusMouseXPos <= (STD_SCREEN_X + 40) )
+				if( mouse_x <= (STD_SCREEN_X + 40) )
 					gfValidCursor = TRUE;
 				break;
 		}

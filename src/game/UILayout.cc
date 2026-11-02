@@ -109,9 +109,9 @@ UINT16 UILayout::currentHeight() const             { return fInMapMode ? (m_wild
 // Wildfire: clock and radar sit in the right part of its bottom panel (at 261, 647)
 // Wildfire: clock and radar sit in the right part of its bottom panel (at 261, 647),
 // in tactical they have a box of their own right of the buttons
-UINT16 UILayout::get_CLOCK_X() const               { return fInMapMode ? (MAP_ORIGIN_X + MAP_LAYOUT(554, 261 + 668)) : m_teamPanelPosition.iX + m_teamPanelSlotsTotalWidth + TAC_LAYOUT(56, 108); }
+UINT16 UILayout::get_CLOCK_X() const               { return fInMapMode ? (MAP_ORIGIN_X + MAP_LAYOUT(554, 261 + 668)) : m_teamPanelPosition.iX + m_teamPanelButtonsBoxX + TAC_LAYOUT(56, 108); }
 UINT16 UILayout::get_CLOCK_Y() const               { return fInMapMode ? (m_wildfireMapScreen ? MAP_ORIGIN_Y + 647 + 97 : currentHeight() - 23) : currentHeight() - TAC_LAYOUT(23, 26); }
-UINT16 UILayout::get_RADAR_WINDOW_X() const        { return fInMapMode ? (MAP_ORIGIN_X + MAP_LAYOUT(543, 261 + 665)) : m_teamPanelPosition.iX + m_teamPanelSlotsTotalWidth + TAC_LAYOUT(45, 96); }
+UINT16 UILayout::get_RADAR_WINDOW_X() const        { return fInMapMode ? (MAP_ORIGIN_X + MAP_LAYOUT(543, 261 + 665)) : m_teamPanelPosition.iX + m_teamPanelButtonsBoxX + TAC_LAYOUT(45, 96); }
 UINT16 UILayout::get_RADAR_WINDOW_TM_Y() const     { return fInMapMode ? (m_wildfireMapScreen ? MAP_ORIGIN_Y + 647 + 12 : currentHeight() - 107) : currentHeight() - TAC_LAYOUT(107, 110); }
 UINT16 UILayout::get_INV_INTERFACE_START_Y() const { return m_screenHeight - INV_INTERFACE_HEIGHT;                                  }
 
@@ -119,10 +119,17 @@ UINT16 UILayout::get_INV_INTERFACE_START_Y() const { return m_screenHeight - INV
 void UILayout::recalculatePositions()
 {
 	m_teamPanelSlotsTotalWidth = getTeamPanelNumSlots() * TEAMPANEL_SLOT_WIDTH;
-	UINT16 tpXOffset = (m_screenWidth - m_teamPanelSlotsTotalWidth - TEAMPANEL_BUTTONSBOX_WIDTH) / 2;
+	// The Wildfire panels are widened to the full screen width: the empty box
+	// of the inventory panel grows and the team panel gets a box of the same
+	// look between the slots and the buttons.
+	UINT16 const baseWidth = m_teamPanelSlotsTotalWidth + TEAMPANEL_BUTTONSBOX_WIDTH;
+	// (not for a few pixels, which would not leave room for the box's frame)
+	m_teamPanelExtraWidth = m_wildfireTacticalPanels && m_screenWidth >= baseWidth + 32 ? m_screenWidth - baseWidth : 0;
+	m_teamPanelWidth = baseWidth + m_teamPanelExtraWidth;
+	m_teamPanelButtonsBoxX = m_teamPanelSlotsTotalWidth + m_teamPanelExtraWidth;
+	UINT16 tpXOffset = (m_screenWidth - m_teamPanelWidth) / 2;
 	UINT16 tpYOffset = m_screenHeight - TEAMPANEL_HEIGHT;
 	m_teamPanelPosition.set(tpXOffset, tpYOffset);
-	m_teamPanelWidth = m_teamPanelSlotsTotalWidth + TEAMPANEL_BUTTONSBOX_WIDTH;
 
 	UINT16 startInvY = get_INV_INTERFACE_START_Y();
 	UINT16 startX    = INTERFACE_START_X;
@@ -192,7 +199,9 @@ void UILayout::recalculatePositions()
 	{
 		m_progress_bar_box.set(STD_SCREEN_X + 5, 2, MIN_INTERFACE_WIDTH - 10, 12);
 	}
-	m_moneyButtonLoc.set(startX + 343, startInvY + 11);
+	// at 129, 10 in the item description box (see ITEMDESC_PANEL_X; its top
+	// is at 1 in the original layout and 7 in Wildfire's)
+	m_moneyButtonLoc.set(ITEMDESC_PANEL_X + 129, startInvY + TAC_LAYOUT(1, 7) + 10);
 	m_MoneyButtonLocMap.set(m_mapScreenOffsetX + 174, m_mapScreenOffsetY + 115);
 
 	m_VIEWPORT_START_X            = 0;

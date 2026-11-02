@@ -526,6 +526,222 @@ void BltVideoSurfaceSmoothScaled(SGPVSurface* const dst, SGPVSurface* const src,
 }
 
 
+namespace
+{
+	// Box blur of one channel, in place, along rows (step 1) or columns (step w).
+	void BoxBlur(std::vector<INT32>& c, INT32 const w, INT32 const h, INT32 const radius, bool const horizontal)
+	{
+		INT32 const len   = horizontal ? w : h;
+		INT32 const lines = horizontal ? h : w;
+		INT32 const step  = horizontal ? 1 : w;
+		INT32 const next  = horizontal ? w : 1;
+		std::vector<INT32> line(len);
+		for (INT32 l = 0; l < lines; ++l)
+		{
+			INT32* const p = c.data() + l * next;
+			for (INT32 i = 0; i < len; ++i) line[i] = p[i * step];
+			// running sum over [i - radius, i + radius], edges clamped
+			INT32 sum = 0;
+			for (INT32 k = -radius; k <= radius; ++k) sum += line[std::clamp(k, 0, len - 1)];
+			for (INT32 i = 0; i < len; ++i)
+			{
+				p[i * step] = sum / (2 * radius + 1);
+				sum += line[std::min(i + radius + 1, len - 1)] - line[std::max(i - radius, 0)];
+			}
+		}
+	}
+}
+
+
+void FillSideMarginsWithMirroredImage(SGPVSurface* const dst, SGPBox const& box)
+{
+	INT32 const w = dst->Width();
+	INT32 const h = dst->Height();
+	INT32 const left   = std::clamp<INT32>(box.x, 0, w);
+	INT32 const right  = std::clamp<INT32>(box.x + box.w, left, w);
+	INT32 const y0     = std::clamp<INT32>(box.y, 0, h);
+	INT32 const y1     = std::clamp<INT32>(box.y + box.h, y0, h);
+	if (dst->BPP() != 16 || right - left < 2 || y1 == y0) return;
+	if (left == 0 && right == w) return;
+
+	SGPVSurface::Lock l(dst);
+	UINT16* const buf = l.Buffer<UINT16>();
+	UINT32 const pitch = l.Pitch() / 2;
+
+	INT32 const BLUR_RADIUS = 12; // two box blur passes per direction
+	INT32 const FADE_WIDTH  = 32; // distance over which the copy goes from sharp to blurred
+
+	// Mirror x (outside the image) back into the image columns [left, right - 1].
+	auto const mirror = [&](INT32 const x) -> INT32
+	{
+		INT32 const span = right - left;
+		INT32 d = (x < left ? left - 1 - x : x - right) % (2 * span); // 0 next to the image
+		if (d >= span) d = 2 * span - 1 - d;
+		return x < left ? left + d : right - 1 - d;
+	};
+
+	auto const fill = [&](INT32 const x_from, INT32 const x_to)
+	{
+		INT32 const mw = x_to - x_from;
+		INT32 const mh = y1 - y0;
+		std::vector<INT32> r(mw * mh), g(mw * mh), b(mw * mh);
+		for (INT32 y = 0; y < mh; ++y)
+		{
+			UINT16 const* const row = buf + (y0 + y) * pitch;
+			for (INT32 x = 0; x < mw; ++x)
+			{
+				UINT16 const p = row[mirror(x_from + x)];
+				r[y * mw + x] = p >> 11;
+				g[y * mw + x] = (p >> 5) & 0x3F;
+				b[y * mw + x] = p & 0x1F;
+			}
+		}
+		// keep the sharp copy, scaled up for precision
+		std::vector<INT32> sr(r), sg(g), sb(b);
+		for (std::vector<INT32>* c : { &r, &g, &b })
+		{
+			for (INT32& v : *c) v <<= 8;
+			for (int pass = 0; pass < 2; ++pass)
+			{
+				BoxBlur(*c, mw, mh, BLUR_RADIUS, true);
+				BoxBlur(*c, mw, mh, BLUR_RADIUS, false);
+			}
+		}
+		INT32 const margin = mw;
+		for (INT32 x = 0; x < mw; ++x)
+		{
+			INT32 const sx = x_from + x;
+			INT32 const dist = sx < left ? left - sx : sx - right + 1; // 1 .. margin
+			// blend factor sharp -> blurred (0 .. 256), brightness 100 % -> 45 % (256 .. 115)
+			INT32 const t = std::min(256, 256 * dist / FADE_WIDTH);
+			INT32 const f = 256 - 141 * dist / margin;
+			for (INT32 y = 0; y < mh; ++y)
+			{
+				INT32 const i = y * mw + x;
+				auto const mix = [&](INT32 const sharp, INT32 const blurred, INT32 const max) -> UINT32
+				{
+					INT32 const v = ((sharp << 8) * (256 - t) + blurred * t) >> 8; // << 8 precision
+					return UINT32(std::min(max, (v * f) >> 16));
+				};
+				buf[(y0 + y) * pitch + sx] = UINT16(mix(sr[i], r[i], 31) << 11 | mix(sg[i], g[i], 63) << 5 | mix(sb[i], b[i], 31));
+			}
+		}
+	};
+	if (left > 0)  fill(0, left);
+	if (right < w) fill(right, w);
+}
+
+
+PixelImage16 ReadPixels16(SGPVSurface* const src, SGPBox const* const box)
+{
+	SGPBox const b = box ? *box : SGPBox{ 0, 0, src->Width(), src->Height() };
+	PixelImage16 img;
+	img.w = b.w;
+	img.h = b.h;
+	img.px.resize(img.w * img.h);
+	if (src->BPP() != 16) return img;
+	SGPVSurface::Lock l(src);
+	UINT16 const* const buf = l.Buffer<UINT16>();
+	UINT32 const pitch = l.Pitch() / 2;
+	for (INT32 y = 0; y < img.h; ++y)
+	{
+		for (INT32 x = 0; x < img.w; ++x) img.at(x, y) = buf[(b.y + y) * pitch + b.x + x];
+	}
+	return img;
+}
+
+
+void WritePixels16(SGPVSurface* const dst, PixelImage16 const& img, INT32 const x, INT32 const y)
+{
+	if (dst->BPP() != 16) return;
+	SGPVSurface::Lock l(dst);
+	UINT16* const buf = l.Buffer<UINT16>();
+	UINT32 const pitch = l.Pitch() / 2;
+	for (INT32 iy = std::max(0, -y); iy < img.h && y + iy < dst->Height(); ++iy)
+	{
+		for (INT32 ix = std::max(0, -x); ix < img.w && x + ix < dst->Width(); ++ix)
+		{
+			buf[(y + iy) * pitch + x + ix] = img.at(ix, iy);
+		}
+	}
+}
+
+
+// Mix two RGB 565 pixels, t = 0 .. 256 being the weight of b.
+static UINT16 Mix565(UINT16 const a, UINT16 const b, INT32 const t)
+{
+	INT32 const r  = ((a >> 11)         * (256 - t) + (b >> 11)         * t) >> 8;
+	INT32 const g  = (((a >> 5) & 0x3F) * (256 - t) + ((b >> 5) & 0x3F) * t) >> 8;
+	INT32 const bl = ((a & 0x1F)        * (256 - t) + (b & 0x1F)        * t) >> 8;
+	return UINT16(r << 11 | g << 5 | bl);
+}
+
+
+PixelImage16 ResizeSeamless(PixelImage16 const& img, INT32 const new_len, INT32 split, INT32 reach, bool const horizontal)
+{
+	INT32 const len   = horizontal ? img.w : img.h;
+	INT32 const delta = new_len - len;
+	split = std::clamp(split, 1, len - 1);
+	reach = std::clamp(reach, 1, std::min(split, len - split));
+	INT32 const FADE = std::min(32, std::max(2, reach)); // width of the cross-fades
+
+	// reflect i (0, 1, 2 ...) back and forth over n pixels
+	auto const reflect = [](INT32 i, INT32 const n) -> INT32
+	{
+		i %= 2 * n;
+		return i < n ? i : 2 * n - 1 - i;
+	};
+
+	// For output position o along the axis: source positions a and b and the
+	// weight of b (0 .. 256).
+	struct Src { INT32 a, b, t; };
+	std::vector<Src> map(std::max(new_len, 0));
+	for (INT32 o = 0; o < new_len; ++o)
+	{
+		Src& s = map[o];
+		if (delta >= 0)
+		{
+			// left of the inserted span the pixels mirror the ones before split,
+			// right of it the ones after split; cross-fade in the middle
+			INT32 const fromLeft  = split - 1 - reflect(o - split, reach);
+			INT32 const fromRight = split + reflect(split + delta - 1 - o, reach);
+			if (o < split)              s = { o, o, 0 };
+			else if (o >= split + delta) s = { o - delta, o - delta, 0 };
+			else
+			{
+				INT32 const mid = split + delta / 2;
+				INT32 const t = std::clamp(128 + (o - mid) * 256 / FADE, 0, 256);
+				s = { fromLeft, fromRight, t };
+			}
+		}
+		else
+		{
+			// leave out -delta pixels after split; cross-fade around the join
+			INT32 const left  = std::min(o, len - 1);
+			INT32 const right = std::clamp(o - delta, 0, len - 1);
+			INT32 const t = std::clamp(128 + (o - split) * 256 / FADE, 0, 256);
+			s = { left, right, t };
+		}
+	}
+
+	PixelImage16 out;
+	out.w = horizontal ? new_len : img.w;
+	out.h = horizontal ? img.h : new_len;
+	out.px.resize(std::max(out.w * out.h, 0));
+	for (INT32 y = 0; y < out.h; ++y)
+	{
+		for (INT32 x = 0; x < out.w; ++x)
+		{
+			Src const& s = map[horizontal ? x : y];
+			UINT16 const a = horizontal ? img.at(s.a, y) : img.at(x, s.a);
+			UINT16 const b = horizontal ? img.at(s.b, y) : img.at(x, s.b);
+			out.at(x, y) = s.t == 0 ? a : s.t == 256 ? b : Mix565(a, b, s.t);
+		}
+	}
+	return out;
+}
+
+
 SGPBox FitImageToScreen(UINT16 const w, UINT16 const h, UINT16 const max_w, UINT16 const max_h)
 {
 	float const scale = std::min({ 1.0f, float(max_w) / w, float(max_h) / h });

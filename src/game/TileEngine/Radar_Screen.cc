@@ -366,8 +366,11 @@ static void CreateDestroyMouseRegionsForSquadList(void)
 
 	if (!fRenderRadarScreen && !fCreated)
 	{
-		BltVideoObjectOnce(guiSAVEBUFFER, INTERFACEDIR "/squadpanel.sti", 0, INTERFACE_START_X + 538, gsVIEWPORT_END_Y);
-		RestoreExternBackgroundRect(INTERFACE_START_X + 538, gsVIEWPORT_END_Y, 102, 120);
+		// the panel (102x120) covers the radar, which it surrounds, and the
+		// clock below it; 5 pixels left of the radar (538 in the original layout)
+		INT16 const panel_x = RADAR_WINDOW_X - 5;
+		BltVideoObjectOnce(guiSAVEBUFFER, INTERFACEDIR "/squadpanel.sti", 0, panel_x, gsVIEWPORT_END_Y);
+		RestoreExternBackgroundRect(panel_x, gsVIEWPORT_END_Y, 102, 120);
 
 		// create regions
 		INT16 const w = RADAR_WINDOW_WIDTH / 2 - 1;

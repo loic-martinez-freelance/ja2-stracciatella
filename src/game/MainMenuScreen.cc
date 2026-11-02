@@ -393,8 +393,10 @@ static void RenderMainMenu(void)
 	BltVideoObject(&composed, logo, 0, (bg.usWidth - lg.usWidth) / 2 - lg.sOffsetX, -lg.sOffsetY);
 	SetClippingRect(old_clip);
 
-	BltVideoSurfaceSmoothScaled(FRAME_BUFFER, &composed,
-		FitImageToScreen(bg.usWidth, bg.usHeight, std::max<UINT16>(640, std::min(SCREEN_WIDTH, bg.usWidth)), std::max<UINT16>(480, std::min(SCREEN_HEIGHT, bg.usHeight))));
+	SGPBox const box = FitImageToScreen(bg.usWidth, bg.usHeight, std::max<UINT16>(640, std::min(SCREEN_WIDTH, bg.usWidth)), std::max<UINT16>(480, std::min(SCREEN_HEIGHT, bg.usHeight)));
+	BltVideoSurfaceSmoothScaled(FRAME_BUFFER, &composed, box);
+	// cover the margins of a widescreen display
+	FillSideMarginsWithMirroredImage(FRAME_BUFFER, box);
 }
 
 void RenderGameVersion() {

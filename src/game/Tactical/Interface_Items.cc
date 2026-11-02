@@ -68,6 +68,7 @@
 #include "Debug.h"
 #include "Items.h"
 #include "UILayout.h"
+#include "Local.h"
 
 #include "CalibreModel.h"
 #include "ContentManager.h"
@@ -113,8 +114,8 @@
 #define ITEM_STATS_HEIGHT				8
 #define MAX_STACK_POPUP_WIDTH				6
 
-#define ITEMDESC_START_X				(INTERFACE_START_X + 214)
-#define ITEMDESC_START_Y				(1 + INV_INTERFACE_START_Y)
+#define ITEMDESC_START_X				ITEMDESC_PANEL_X
+#define ITEMDESC_START_Y				(TAC_LAYOUT(1, 7) + INV_INTERFACE_START_Y)
 #define ITEMDESC_HEIGHT				133
 #define ITEMDESC_WIDTH					320
 #define MAP_ITEMDESC_HEIGHT				268
@@ -127,7 +128,7 @@
 
 #define BULLET_SING_X					(222 + gsInvDescX)
 #define BULLET_SING_Y					(49 + gsInvDescY)
-#define BULLET_BURST_X					(263 + gsInvDescX)
+#define BULLET_BURST_X					(DescX(263) + gsInvDescX)
 #define BULLET_BURST_Y					(49 + gsInvDescY)
 #define BULLET_WIDTH					3
 
@@ -226,6 +227,26 @@ static ST::string gzItemPros;
 static ST::string gzItemCons;
 static INT16 gsInvDescX;
 static INT16 gsInvDescY;
+
+/* Width added to the tactical item description box, which is stretched to fill
+ * the (widened) empty box of Wildfire's inventory panel. The width is added
+ * inside the stats area, at ITEMDESC_STRETCH_X: what is right of it moves
+ * right, the text boxes get wider. 0 elsewhere (map screen, shopkeeper). */
+static INT16 gsInvDescExtraW = 0;
+#define ITEMDESC_STRETCH_X 255
+
+// x in the description box, moved right if it is right of the stretched part
+static INT16 DescX(INT16 const x)
+{
+	return x >= ITEMDESC_STRETCH_X ? x + gsInvDescExtraW : x;
+}
+
+// a box spanning the stretched part
+static SGPBox DescWide(SGPBox b)
+{
+	b.w += gsInvDescExtraW;
+	return b;
+}
 static UINT8 gubItemDescStatusIndex;
 static BUTTON_PICS *giItemDescAmmoButtonImages;
 static GUIButtonRef giItemDescAmmoButton;
@@ -1656,6 +1677,7 @@ void InternalInitItemDescriptionBox(OBJECTTYPE* const o, const INT16 sX, const I
 
 	gsInvDescX = sX;
 	gsInvDescY = sY;
+	gsInvDescExtraW = guiCurrentItemDescriptionScreen == GAME_SCREEN ? ITEMDESC_PANEL_EXTRA_WIDTH : 0;
 
 	gpItemDescObject       = o;
 	gubItemDescStatusIndex = ubStatusIndex;
@@ -1674,7 +1696,7 @@ void InternalInitItemDescriptionBox(OBJECTTYPE* const o, const INT16 sX, const I
 	}
 	else
 	{
-		MSYS_DefineRegion(&gInvDesc, gsInvDescX, gsInvDescY, gsInvDescX + ITEMDESC_WIDTH, gsInvDescY + ITEMDESC_HEIGHT, MSYS_PRIORITY_HIGHEST, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, itemDescCallback);
+		MSYS_DefineRegion(&gInvDesc, gsInvDescX, gsInvDescY, gsInvDescX + ITEMDESC_WIDTH + gsInvDescExtraW, gsInvDescY + ITEMDESC_HEIGHT, MSYS_PRIORITY_HIGHEST, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, itemDescCallback);
 	}
 
 	if (GCM->getItem(o->usItem)->isGun()&& o->usItem != ROCKET_LAUNCHER)
@@ -1722,7 +1744,8 @@ void InternalInitItemDescriptionBox(OBJECTTYPE* const o, const INT16 sX, const I
 	if (ITEM_PROS_AND_CONS(o->usItem))
 	{
 		INT16         const pros_cons_indent = std::max(StringPixLength(gzProsLabel, ITEMDESC_FONT), StringPixLength(gzConsLabel, ITEMDESC_FONT)) + 10;
-		const SGPBox* const box              = (in_map ? &g_map_itemdesc_pros_cons_box : &g_itemdesc_pros_cons_box);
+		SGPBox        const wide_box         = DescWide(in_map ? g_map_itemdesc_pros_cons_box : g_itemdesc_pros_cons_box);
+		const SGPBox* const box              = &wide_box;
 		UINT16        const x                = box->x + pros_cons_indent + gsInvDescX;
 		UINT16              y                = box->y                    + gsInvDescY;
 		UINT16        const w                = box->w - pros_cons_indent;
@@ -2099,7 +2122,25 @@ void RenderItemDescriptionBox(void)
 	INT16      const  dy     = gsInvDescY;
 
 	auto * const box_gfx = in_map ? guiMapItemDescBox : guiItemDescBox;
-	BltVideoObject(guiSAVEBUFFER, box_gfx, 0, dx, dy);
+	if (gsInvDescExtraW > 0)
+	{
+		// stretched by repeating part of the stats area, which is plain texture
+		// in every row there
+		static PixelImage16 wide;
+		SGPVObject const* const vo = GetVObject(box_gfx);
+		ETRLEObject const& e = vo->SubregionProperties(0);
+		if (wide.w != e.usWidth + gsInvDescExtraW)
+		{
+			SGPVSurface tmp(e.usWidth, e.usHeight, PIXEL_DEPTH);
+			BltVideoObject(&tmp, vo, 0, -e.sOffsetX, -e.sOffsetY);
+			wide = ResizeSeamless(ReadPixels16(&tmp), e.usWidth + gsInvDescExtraW, ITEMDESC_STRETCH_X, 50, true);
+		}
+		WritePixels16(guiSAVEBUFFER, wide, dx, dy);
+	}
+	else
+	{
+		BltVideoObject(guiSAVEBUFFER, box_gfx, 0, dx, dy);
+	}
 
 	// Display the money 'separating' border
 	if (obj.usItem == MONEY)
@@ -2201,7 +2242,7 @@ void RenderItemDescriptionBox(void)
 	}
 
 	{
-		INT16 const w = in_map ? MAP_ITEMDESC_WIDTH  : ITEMDESC_WIDTH;
+		INT16 const w = (in_map ? MAP_ITEMDESC_WIDTH  : ITEMDESC_WIDTH) + gsInvDescExtraW;
 		INT16 const h = in_map ? MAP_ITEMDESC_HEIGHT : ITEMDESC_HEIGHT;
 		RestoreExternBackgroundRect(dx, dy, w, h);
 	}
@@ -2218,7 +2259,7 @@ void RenderItemDescriptionBox(void)
 	SetFontShadow(ITEMDESC_FONTSHADOW2);
 
 	{
-		SGPBox const& box = in_map ? g_map_itemdesc_desc_box : g_itemdesc_desc_box;
+		SGPBox const box = DescWide(in_map ? g_map_itemdesc_desc_box : g_itemdesc_desc_box);
 		DisplayWrappedString(dx + box.x, dy + box.y, box.w, 2, ITEMDESC_FONT, FONT_BLACK, gzItemDesc, FONT_MCOLOR_BLACK, LEFT_JUSTIFIED);
 	}
 
@@ -2238,13 +2279,13 @@ void RenderItemDescriptionBox(void)
 				pStr += ST::format(" ({})", imprint);
 			}
 
-			SGPBox const& xy = in_map ? gMapDescNameBox : gDescNameBox;
+			SGPBox const xy = DescWide(in_map ? gMapDescNameBox : gDescNameBox);
 			FindFontRightCoordinates(dx + xy.x, dy + xy.y, xy.w, xy.h, pStr, ITEMDESC_FONT, &usX, &usY);
 			MPrint(usX, usY, pStr);
 		}
 
 		{
-			SGPBox const& box = in_map ? g_map_itemdesc_pros_cons_box : g_itemdesc_pros_cons_box;
+			SGPBox const box = DescWide(in_map ? g_map_itemdesc_pros_cons_box : g_itemdesc_pros_cons_box);
 			INT32         x   = box.x + dx;
 			INT32  const  y   = box.y + dy;
 			INT32         w   = box.w;
@@ -2287,38 +2328,38 @@ void RenderItemDescriptionBox(void)
 		INV_DESC_STATS const* const ids = in_map ? gMapWeaponStats : gWeaponStats;
 
 		//LABELS
-		MPrint(dx + ids[0].sX, dy + ids[0].sY, st_format_printf(gWeaponStatsDesc[0], GetWeightUnitString())); // mass
+		MPrint(dx + DescX(ids[0].sX), dy + ids[0].sY, st_format_printf(gWeaponStatsDesc[0], GetWeightUnitString())); // mass
 		if (item->getItemClass() & (IC_GUN | IC_LAUNCHER))
 		{
-			MPrint(dx + ids[2].sX, dy + ids[2].sY, gWeaponStatsDesc[3]); // range
+			MPrint(dx + DescX(ids[2].sX), dy + ids[2].sY, gWeaponStatsDesc[3]); // range
 		}
 		if (!(item->isLauncher()) && obj.usItem != ROCKET_LAUNCHER)
 		{
-			MPrint(dx + ids[3].sX, dy + ids[3].sY, gWeaponStatsDesc[4]); // damage
+			MPrint(dx + DescX(ids[3].sX), dy + ids[3].sY, gWeaponStatsDesc[4]); // damage
 		}
-		MPrint(dx + ids[4].sX, dy + ids[4].sY, gWeaponStatsDesc[5]); // APs
+		MPrint(dx + DescX(ids[4].sX), dy + ids[4].sY, gWeaponStatsDesc[5]); // APs
 		if (item->isGun())
 		{
-			MPrint(dx + ids[6].sX, dy + ids[6].sY, gWeaponStatsDesc[6]); // = (sic)
+			MPrint(dx + DescX(ids[6].sX), dy + ids[6].sY, gWeaponStatsDesc[6]); // = (sic)
 		}
-		MPrint(dx + ids[1].sX, dy + ids[1].sY, gWeaponStatsDesc[1]); // status
+		MPrint(dx + DescX(ids[1].sX), dy + ids[1].sY, gWeaponStatsDesc[1]); // status
 
 		const WeaponModel * w = GCM->getWeapon(obj.usItem);
 		if (w->ubShotsPerBurst > 0)
 		{
-			MPrint(dx + ids[7].sX, dy + ids[7].sY, gWeaponStatsDesc[6]); // = (sic)
+			MPrint(dx + DescX(ids[7].sX), dy + ids[7].sY, gWeaponStatsDesc[6]); // = (sic)
 		}
 
 		//Status
 		SetFontForeground(5);
 		pStr = ST::format("{2d}%", obj.bGunStatus);
-		FindFontRightCoordinates(dx + ids[1].sX + ids[1].sValDx, dy + ids[1].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
+		FindFontRightCoordinates(dx + DescX(ids[1].sX + ids[1].sValDx), dy + ids[1].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 		MPrint(usX, usY, pStr);
 
 		//Weight
 		HighlightIf(objectWeight <= EXCEPTIONAL_WEIGHT);
 		pStr = ST::format("{1.1f}", convertedWeight);
-		FindFontRightCoordinates(dx + ids[0].sX + ids[0].sValDx, dy + ids[0].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
+		FindFontRightCoordinates(dx + DescX(ids[0].sX + ids[0].sValDx), dy + ids[0].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 		MPrint(usX, usY, pStr);
 
 		if (item->getItemClass() & (IC_GUN | IC_LAUNCHER))
@@ -2327,7 +2368,7 @@ void RenderItemDescriptionBox(void)
 			UINT16 const range = GunRange(obj);
 			HighlightIf(range >= EXCEPTIONAL_RANGE);
 			pStr = ST::format("{2d}", range / 10);
-			FindFontRightCoordinates(dx + ids[2].sX + ids[2].sValDx, dy + ids[2].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
+			FindFontRightCoordinates(dx + DescX(ids[2].sX + ids[2].sValDx), dy + ids[2].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, pStr);
 		}
 
@@ -2336,7 +2377,7 @@ void RenderItemDescriptionBox(void)
 			// Damage
 			HighlightIf(w->ubImpact >= EXCEPTIONAL_DAMAGE);
 			pStr = ST::format("{2d}", w->ubImpact);
-			FindFontRightCoordinates(dx + ids[3].sX + ids[3].sValDx, dy + ids[3].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
+			FindFontRightCoordinates(dx + DescX(ids[3].sX + ids[3].sValDx), dy + ids[3].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, pStr);
 		}
 
@@ -2345,14 +2386,14 @@ void RenderItemDescriptionBox(void)
 		//APs
 		HighlightIf(ubAttackAPs <= EXCEPTIONAL_AP_COST);
 		pStr = ST::format("{2d}", ubAttackAPs);
-		FindFontRightCoordinates(dx + ids[4].sX + ids[4].sValDx, dy + ids[4].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
+		FindFontRightCoordinates(dx + DescX(ids[4].sX + ids[4].sValDx), dy + ids[4].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 		MPrint(usX, usY, pStr);
 
 		if (w->ubShotsPerBurst > 0)
 		{
 			HighlightIf(w->ubShotsPerBurst >= EXCEPTIONAL_BURST_SIZE || obj.usItem == G11);
 			pStr = ST::format("{2d}", ubAttackAPs + CalcAPsToBurst(DEFAULT_APS, obj));
-			FindFontRightCoordinates(dx + ids[5].sX + ids[5].sValDx, dy + ids[5].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
+			FindFontRightCoordinates(dx + DescX(ids[5].sX + ids[5].sValDx), dy + ids[5].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, pStr);
 		}
 	}
@@ -2363,7 +2404,7 @@ void RenderItemDescriptionBox(void)
 		{
 			// Display the total amount of money
 			pStr = SPrintMoney(in_map && gfAddingMoneyToMercFromPlayersAccount ? LaptopSaveInfo.iCurrentBalance : gRemoveMoney.uiTotalAmount);
-			SGPBox const& xy = in_map ? gMapDescNameBox : gDescNameBox;
+			SGPBox const xy = DescWide(in_map ? gMapDescNameBox : gDescNameBox);
 			FindFontRightCoordinates(dx + xy.x, dy + xy.y, xy.w, xy.h, pStr, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, pStr);
 		}
@@ -2382,17 +2423,17 @@ void RenderItemDescriptionBox(void)
 
 		if (!in_map && gfAddingMoneyToMercFromPlayersAccount)
 		{
-			MPrint(dx + xy[0].sX, dy + xy[0].sY, gMoneyStatsDesc[MONEY_DESC_PLAYERS]);           // current ...
-			MPrint(dx + xy[1].sX, dy + xy[1].sY, gMoneyStatsDesc[MONEY_DESC_BALANCE]);           // ... balance
-			MPrint(dx + xy[2].sX, dy + xy[2].sY, gMoneyStatsDesc[MONEY_DESC_AMOUNT_2_WITHDRAW]); // amount to ...
-			MPrint(dx + xy[3].sX, dy + xy[3].sY, gMoneyStatsDesc[MONEY_DESC_TO_WITHDRAW]);       // ... widthdraw
+			MPrint(dx + DescX(xy[0].sX), dy + xy[0].sY, gMoneyStatsDesc[MONEY_DESC_PLAYERS]);           // current ...
+			MPrint(dx + DescX(xy[1].sX), dy + xy[1].sY, gMoneyStatsDesc[MONEY_DESC_BALANCE]);           // ... balance
+			MPrint(dx + DescX(xy[2].sX), dy + xy[2].sY, gMoneyStatsDesc[MONEY_DESC_AMOUNT_2_WITHDRAW]); // amount to ...
+			MPrint(dx + DescX(xy[3].sX), dy + xy[3].sY, gMoneyStatsDesc[MONEY_DESC_TO_WITHDRAW]);       // ... widthdraw
 		}
 		else
 		{
-			MPrint(dx + xy[0].sX, dy + xy[0].sY, gMoneyStatsDesc[MONEY_DESC_AMOUNT]);         // amount ...
-			MPrint(dx + xy[1].sX, dy + xy[1].sY, gMoneyStatsDesc[MONEY_DESC_REMAINING]);      // ... remaining
-			MPrint(dx + xy[2].sX, dy + xy[2].sY, gMoneyStatsDesc[MONEY_DESC_AMOUNT_2_SPLIT]); // amount ...
-			MPrint(dx + xy[3].sX, dy + xy[3].sY, gMoneyStatsDesc[MONEY_DESC_TO_SPLIT]);       // ... to split
+			MPrint(dx + DescX(xy[0].sX), dy + xy[0].sY, gMoneyStatsDesc[MONEY_DESC_AMOUNT]);         // amount ...
+			MPrint(dx + DescX(xy[1].sX), dy + xy[1].sY, gMoneyStatsDesc[MONEY_DESC_REMAINING]);      // ... remaining
+			MPrint(dx + DescX(xy[2].sX), dy + xy[2].sY, gMoneyStatsDesc[MONEY_DESC_AMOUNT_2_SPLIT]); // amount ...
+			MPrint(dx + DescX(xy[3].sX), dy + xy[3].sY, gMoneyStatsDesc[MONEY_DESC_TO_SPLIT]);       // ... to split
 		}
 
 		SetFontForeground(5);
@@ -2405,12 +2446,12 @@ void RenderItemDescriptionBox(void)
 		if (in_map)
 		{
 			UINT16 const uiStringLength = StringPixLength(pStr, ITEMDESC_FONT);
-			INT16  const sStrX          = dx + xy[1].sX + xy[1].sValDx + (uiRightLength - uiStringLength);
+			INT16  const sStrX          = dx + DescX(xy[1].sX + xy[1].sValDx) + (uiRightLength - uiStringLength);
 			MPrint(sStrX, dy + xy[1].sY, pStr);
 		}
 		else
 		{
-			FindFontRightCoordinates(dx + xy[1].sX + xy[1].sValDx, dy + xy[1].sY, ITEM_STATS_WIDTH - 3, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
+			FindFontRightCoordinates(dx + DescX(xy[1].sX + xy[1].sValDx), dy + xy[1].sY, ITEM_STATS_WIDTH - 3, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, pStr);
 		}
 
@@ -2419,12 +2460,12 @@ void RenderItemDescriptionBox(void)
 		if (in_map)
 		{
 			UINT16 const uiStringLength = StringPixLength(pStr, ITEMDESC_FONT);
-			INT16  const sStrX          = dx + xy[3].sX + xy[3].sValDx + (uiRightLength - uiStringLength);
+			INT16  const sStrX          = dx + DescX(xy[3].sX + xy[3].sValDx) + (uiRightLength - uiStringLength);
 			MPrint(sStrX, dy + xy[3].sY, pStr);
 		}
 		else
 		{
-			FindFontRightCoordinates(dx + xy[3].sX + xy[3].sValDx, dy + xy[3].sY, ITEM_STATS_WIDTH - 3, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
+			FindFontRightCoordinates(dx + DescX(xy[3].sX + xy[3].sValDx), dy + xy[3].sY, ITEM_STATS_WIDTH - 3, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, pStr);
 		}
 	}
@@ -2432,7 +2473,7 @@ void RenderItemDescriptionBox(void)
 	{
 		SetFontForeground(FONT_FCOLOR_WHITE);
 		pStr = SPrintMoney(obj.uiMoneyAmount);
-		SGPBox const& xy = in_map ? gMapDescNameBox : gDescNameBox;
+		SGPBox const xy = DescWide(in_map ? gMapDescNameBox : gDescNameBox);
 		FindFontRightCoordinates(dx + xy.x, dy + xy.y, xy.w, xy.h, pStr, BLOCKFONT2, &usX, &usY);
 		MPrint(usX, usY, pStr);
 	}
@@ -2445,10 +2486,10 @@ void RenderItemDescriptionBox(void)
 
 		// amount for ammunition, status otherwise
 		ST::string label = GCM->getItem(gpItemDescObject->usItem)->isAmmo() ? gWeaponStatsDesc[2] : gWeaponStatsDesc[1];
-		MPrint(dx + ids[1].sX, dy + ids[1].sY, label);
+		MPrint(dx + DescX(ids[1].sX), dy + ids[1].sY, label);
 
 		//Weight
-		MPrint(dx + ids[0].sX, dy + ids[0].sY, st_format_printf(gWeaponStatsDesc[0], GetWeightUnitString()));
+		MPrint(dx + DescX(ids[0].sX), dy + ids[0].sY, st_format_printf(gWeaponStatsDesc[0], GetWeightUnitString()));
 
 		// Values
 		SetFontForeground(5);
@@ -2457,27 +2498,27 @@ void RenderItemDescriptionBox(void)
 		{
 			// Ammo - print amount
 			pStr = ST::format("{}/{}", obj.ubShotsLeft[gubItemDescStatusIndex], item->asAmmo()->capacity);
-			FindFontRightCoordinates(dx + ids[1].sX + ids[1].sValDx, dy + ids[1].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
+			FindFontRightCoordinates(dx + DescX(ids[1].sX + ids[1].sValDx), dy + ids[1].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, pStr);
 		}
 		else
 		{
 			// Status
 			pStr = ST::format("{2d}%", obj.bStatus[gubItemDescStatusIndex]);
-			FindFontRightCoordinates(dx + ids[1].sX + ids[1].sValDx, dy + ids[1].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
+			FindFontRightCoordinates(dx + DescX(ids[1].sX + ids[1].sValDx), dy + ids[1].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, pStr);
 		}
 
 		//Weight
 		pStr = ST::format("{1.1f}", convertedWeight);
-		FindFontRightCoordinates(dx + ids[0].sX + ids[0].sValDx, dy + ids[0].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
+		FindFontRightCoordinates(dx + DescX(ids[0].sX + ids[0].sValDx), dy + ids[0].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 		MPrint(usX, usY, pStr);
 
 		if (InKeyRingPopup() || item->isKey())
 		{
 			SetFontForeground(6);
 
-			INT32 const x  = dx + ids[3].sX;
+			INT32 const x  = dx + DescX(ids[3].sX);
 			INT32 const y0 = dy + ids[3].sY;
 			INT32 const y1 = y0 + GetFontHeight(BLOCKFONT) + 2;
 
@@ -2489,11 +2530,11 @@ void RenderItemDescriptionBox(void)
 
 			SetFontForeground(5);
 			ST::string sTempString = SGPSector(key.usSectorFound).AsShortString();
-			FindFontRightCoordinates(x, y0, 110, ITEM_STATS_HEIGHT, sTempString, BLOCKFONT2, &usX, &usY);
+			FindFontRightCoordinates(x, y0, 110 + gsInvDescExtraW, ITEM_STATS_HEIGHT, sTempString, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, sTempString);
 
 			pStr = ST::format("{}", key.usDateFound);
-			FindFontRightCoordinates(x, y1, 110, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
+			FindFontRightCoordinates(x, y1, 110 + gsInvDescExtraW, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, pStr);
 		}
 	}

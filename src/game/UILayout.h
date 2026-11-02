@@ -37,6 +37,14 @@
 /* Pick a value depending on the map screen layout (original or Wildfire). */
 #define MAP_LAYOUT(original, wildfire)  (g_ui.m_wildfireMapScreen ? (wildfire) : (original))
 
+/* x of the item description box in the tactical inventory panel: over the
+ * inventory in the original layout; in Wildfire's, filling the inside of the
+ * empty box right of it (x 540 to 911 of the 1024 pixel panel, plus the width
+ * the panel is widened by), so the 320 pixel box is stretched by the extra
+ * width. */
+#define ITEMDESC_PANEL_X                (INTERFACE_START_X + TAC_LAYOUT(214, 540))
+#define ITEMDESC_PANEL_EXTRA_WIDTH      TAC_LAYOUT(0, 911 - 540 - 320 + g_ui.m_teamPanelExtraWidth)
+
 #define SM_BODYINV_X                    (INTERFACE_START_X + 244)
 #define SM_BODYINV_Y                    (INV_INTERFACE_START_Y + 6)
 #define SM_INVINTERFACE_WIDTH           (532)    // width of the single-merc inventory panel excluding the right-side buttons and minimap
@@ -131,6 +139,8 @@ public:
 	SGPPoint              m_teamPanelPosition;              // offset position of the bottom bar
 	UINT16                m_teamPanelSlotsTotalWidth;       // total width of all team slots in the bottom team panel
 	UINT16                m_teamPanelWidth;                 // width of the entire team panel including slots and buttons
+	UINT16                m_teamPanelExtraWidth = 0;        // width added to the Wildfire panels to fill the screen
+	UINT16                m_teamPanelButtonsBoxX;           // x of the buttons box (and radar) relative to the panel
 
 	/** Jagged Alliance 2: Wildfire 6 ships a 1024x768 strategic map screen
 	 * (bigger map, message log in the left column, new bottom panel). */

@@ -79,10 +79,17 @@
 
 // DEFINES FOR VARIOUS PANELS
 // Wildfire has an area of its own for the item description
-#define SM_ITEMDESC_START_X			(TAC_LAYOUT(214, 565) + INTERFACE_START_X)
+// The empty box right of the inventory in Wildfire's inventory panel (frame
+// included), which is widened when the screen is wider than the panel.
+#define WF_SM_BOX_X				526
+#define WF_SM_BOX_WIDTH				(922 - WF_SM_BOX_X)
+#define WF_SM_BOX_SPLIT_X			725 // middle of the box
+#define WF_SM_BOX_REACH				150 // stays inside the box interior
+
+#define SM_ITEMDESC_START_X			ITEMDESC_PANEL_X
 #define SM_ITEMDESC_START_Y			(TAC_LAYOUT(1, 7) + INV_INTERFACE_START_Y)
 #define SM_ITEMDESC_HEIGHT			128
-#define SM_ITEMDESC_WIDTH			314
+#define SM_ITEMDESC_WIDTH			(314 + ITEMDESC_PANEL_EXTRA_WIDTH)
 
 // SINGLE MERC SCREEN
 
@@ -141,9 +148,9 @@
 #define SM_STEALTHMODE_X			187
 #define SM_STEALTHMODE_Y			73
 // Wildfire: in the box right of the item description area
-#define SM_DONE_X				(g_ui.m_teamPanelSlotsTotalWidth + TAC_LAYOUT(45, 97))
+#define SM_DONE_X				(g_ui.m_teamPanelButtonsBoxX + TAC_LAYOUT(45, 97))
 #define SM_DONE_Y				TAC_LAYOUT(4, 3)
-#define SM_MAPSCREEN_X				(g_ui.m_teamPanelSlotsTotalWidth + TAC_LAYOUT(91, 142))
+#define SM_MAPSCREEN_X				(g_ui.m_teamPanelButtonsBoxX + TAC_LAYOUT(91, 142))
 #define SM_MAPSCREEN_Y				TAC_LAYOUT(4, 3)
 
 
@@ -204,11 +211,11 @@
 #define TM_FACE_WIDTH				48
 #define TM_FACE_HEIGHT				43
 
-#define TM_ENDTURN_X				(g_ui.m_teamPanelSlotsTotalWidth + 9)
+#define TM_ENDTURN_X				(g_ui.m_teamPanelButtonsBoxX + 9)
 #define TM_ENDTURN_Y				9
-#define TM_ROSTERMODE_X			(g_ui.m_teamPanelSlotsTotalWidth + 9)
+#define TM_ROSTERMODE_X			(g_ui.m_teamPanelButtonsBoxX + 9)
 #define TM_ROSTERMODE_Y			45
-#define TM_DISK_X				(g_ui.m_teamPanelSlotsTotalWidth + 9)
+#define TM_DISK_X				(g_ui.m_teamPanelButtonsBoxX + 9)
 #define TM_DISK_Y				81
 
 #define TM_NAME_X				11
@@ -883,17 +890,28 @@ void InitializeSMPanel()
 	// Assemble the SMPanel from graphic objects.
 	// For visual consistency, the SMPanel should fill up the same width as the TEAMPanel, that the buttons and
 	// minimap are in the bottom-right corner.
-	SGPVObject* voSMPanel = AddVideoObjectFromFile(INTERFACEDIR "/inventory_bottom_panel.sti");
 	guiSMPanel = new SGPVSurface(g_ui.m_teamPanelWidth, INV_INTERFACE_HEIGHT, PIXEL_DEPTH);
-	if (g_ui.m_teamPanelWidth > 640 && !g_ui.m_wildfireTacticalPanels)
+	if (g_ui.m_wildfireTacticalPanels)
 	{
-		// The team panel is longer than default
-		// need a second blit, and we will start from the right
-		BltVideoObject(guiSMPanel, voSMPanel, 0, g_ui.m_teamPanelWidth - 640, 0);
+		// widen the empty box right of the inventory to fill the screen
+		auto vsSMPanel = CreateVideoSurfaceFromObjectFile(INTERFACEDIR "/inventory_bottom_panel.sti", 0);
+		PixelImage16 const panel = ReadPixels16(vsSMPanel.get());
+		WritePixels16(guiSMPanel, ResizeSeamless(panel, g_ui.m_teamPanelWidth,
+			WF_SM_BOX_SPLIT_X, WF_SM_BOX_REACH, true), 0, 0);
 	}
-	// draw the basic Single-Merc panel
-	BltVideoObject(guiSMPanel, voSMPanel, 0, 0, 0);
-	DeleteVideoObject(voSMPanel);
+	else
+	{
+		SGPVObject* voSMPanel = AddVideoObjectFromFile(INTERFACEDIR "/inventory_bottom_panel.sti");
+		if (g_ui.m_teamPanelWidth > 640)
+		{
+			// The team panel is longer than default
+			// need a second blit, and we will start from the right
+			BltVideoObject(guiSMPanel, voSMPanel, 0, g_ui.m_teamPanelWidth - 640, 0);
+		}
+		// draw the basic Single-Merc panel
+		BltVideoObject(guiSMPanel, voSMPanel, 0, 0, 0);
+		DeleteVideoObject(voSMPanel);
+	}
 
 	// Wildfire's graphic is already as wide as the team panel
 	INT16 sFillerWidth = g_ui.m_wildfireTacticalPanels ? 0 : g_ui.m_teamPanelWidth - 640;
@@ -2289,7 +2307,27 @@ void InitializeTEAMPanel()
 	guiTEAMPanel = new SGPVSurface(g_ui.m_teamPanelWidth, TEAMPANEL_HEIGHT, PIXEL_DEPTH);
 
 	auto vsTEAMPanel = CreateVideoSurfaceFromObjectFile(INTERFACEDIR "/bottom_bar.sti", 0);
-	BltVideoSurface(guiTEAMPanel, vsTEAMPanel.get(), 0, 0, NULL);
+	if (g_ui.m_teamPanelExtraWidth > 0)
+	{
+		// Wildfire panel widened to the screen: slots, then a box like the
+		// empty one of the inventory panel, then the buttons box
+		UINT16 const slots = g_ui.m_teamPanelSlotsTotalWidth;
+		SGPBox const slotsRect = { 0, 0, slots, TEAMPANEL_HEIGHT };
+		SGPBox const buttonsRect = { slots, 0, UINT16(TEAMPANEL_BUTTONSBOX_WIDTH), TEAMPANEL_HEIGHT };
+		BltVideoSurface(guiTEAMPanel, vsTEAMPanel.get(), 0, 0, &slotsRect);
+		BltVideoSurface(guiTEAMPanel, vsTEAMPanel.get(), g_ui.m_teamPanelButtonsBoxX, 0, &buttonsRect);
+
+		auto vsSMPanel = CreateVideoSurfaceFromObjectFile(INTERFACEDIR "/inventory_bottom_panel.sti", 0);
+		SGPBox const boxRect = { WF_SM_BOX_X, 0, WF_SM_BOX_WIDTH, INV_INTERFACE_HEIGHT };
+		PixelImage16 box = ReadPixels16(vsSMPanel.get(), &boxRect);
+		box = ResizeSeamless(box, TEAMPANEL_HEIGHT, INV_INTERFACE_HEIGHT / 2, 40, false);
+		box = ResizeSeamless(box, g_ui.m_teamPanelExtraWidth, WF_SM_BOX_WIDTH / 2, WF_SM_BOX_REACH, true);
+		WritePixels16(guiTEAMPanel, box, slots, 0);
+	}
+	else
+	{
+		BltVideoSurface(guiTEAMPanel, vsTEAMPanel.get(), 0, 0, NULL);
+	}
 	// Wildfire's graphic already has all slots
 	if (!g_ui.m_wildfireTacticalPanels) for (int i = 6; i < NUM_TEAM_SLOTS; i++)
 	{	// extend the panel if needed
@@ -3226,7 +3264,7 @@ void RenderTownIDString(void)
 	SetFontAttributes(COMPFONT, 183);
 	ST::string zTownIDString = GetSectorIDString(gWorldSector, TRUE);
 	zTownIDString = ReduceStringLength(zTownIDString, 80, COMPFONT);
-	MPrint(INTERFACE_START_X + g_ui.m_teamPanelSlotsTotalWidth + TAC_LAYOUT(50, 102),
+	MPrint(INTERFACE_START_X + g_ui.m_teamPanelButtonsBoxX + TAC_LAYOUT(50, 102),
 		SCREEN_HEIGHT - TAC_LAYOUT(55, 58), zTownIDString, HCenterVCenterAlign(80, 16));
 }
 
@@ -3687,6 +3725,12 @@ static void SMInvMoneyButtonCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 		//else bring up the money item description box to remove money from the players account
 		else
 		{
+			// Close the description box of another item first: its mouse regions
+			// would otherwise be defined again while still in use, which corrupts
+			// the region list (and hangs the game). In the original layout the box
+			// covers this button, but Wildfire's box is next to it.
+			if (InItemDescriptionBox()) DeleteItemDescriptionBox();
+
 			//set the flag indicating we are removing money from the players account
 			gfAddingMoneyToMercFromPlayersAccount = TRUE;
 
