@@ -262,7 +262,13 @@ void LoadWorldItemsFromMap(HWFILE const f)
 				o.usItem = item;
 			}
 
-			const ItemModel* item = GCM->getItem(o.usItem);
+			const ItemModel* item = GCM->getItem(o.usItem, ItemSystem::nothrow);
+			if (!item)
+			{
+				// Maps made for another item set (e.g. Wildfire) can place items we don't define.
+				SLOGW("Skipping unknown map item #{} at gridNo {}", o.usItem, wi.sGridNo);
+				continue;
+			}
 			if (item->getFlags() & ITEM_NOT_EDITOR) {
 				// This item is not placable by Editor. Maybe the map was created for a different item set.
 				SLOGW("Skipping non-Editor item #{}({}) at gridNo {}", item->getItemIndex(), item->getInternalName(), wi.sGridNo);
@@ -274,7 +280,8 @@ void LoadWorldItemsFromMap(HWFILE const f)
 				// do replacements?
 				const WeaponModel *weapon = item->asWeapon();
 				const MagazineModel *mag = item->asAmmo();
-				if (weapon && weapon->isInBigGunList())
+				// Items without a standard replacement are left as they are
+				if (weapon && weapon->isInBigGunList() && !weapon->getStandardReplacement().empty())
 				{
 					const WeaponModel *replacement = GCM->getWeaponByName(item->asWeapon()->getStandardReplacement());
 
@@ -285,7 +292,7 @@ void LoadWorldItemsFromMap(HWFILE const f)
 						o.usItem         = replacement->getItemIndex();
 						o.ubGunShotsLeft = new_ammo;
 				}
-				else if (mag && mag->isInBigGunList())
+				else if (mag && mag->isInBigGunList() && !mag->getStandardReplacement().empty())
 				{
 					const MagazineModel *replacement = GCM->getMagazineByName(mag->getStandardReplacement());
 

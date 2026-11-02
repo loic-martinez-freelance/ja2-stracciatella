@@ -160,6 +160,7 @@ void InitProfileFromContent(ProfileID const i)
 			if (!item->isGun() || !item->isInBigGunList()) continue;
 
 			const WeaponModel *oldWeapon = item->asWeapon();
+			if (oldWeapon->getStandardReplacement().empty()) continue;
 			const WeaponModel *newWeapon = GCM->getWeaponByName(oldWeapon->getStandardReplacement());
 
 			*k = newWeapon->getItemIndex();

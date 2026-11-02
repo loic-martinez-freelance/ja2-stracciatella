@@ -26,6 +26,7 @@
 #include "NPC.h"
 #include "Scheduling.h"
 #include "Logger.h"
+#include "Items.h"
 #include "MercProfile.h"
 
 #include "ContentManager.h"
@@ -177,6 +178,51 @@ BOOLEAN SaveSoldiersToMap( HWFILE fp )
 }
 
 
+// Apply the map item replacements to a map-placed soldier's inventory and drop
+// any item the current item set doesn't define. Maps made for another item set
+// (e.g. Wildfire) can equip soldiers with such items.
+static void SanitizeMapPlacedInventory(SOLDIERCREATE_STRUCT& sc)
+{
+	auto const& itemReplacements = GCM->getMapItemReplacements();
+	auto const replace = [&](UINT16& item) -> bool // false: drop the item
+	{
+		if (!gfEditMode)
+		{
+			auto const it = itemReplacements.find(item);
+			if (it != itemReplacements.end())
+			{
+				if (it->second == NOTHING) return false;
+				item = it->second;
+			}
+		}
+		return GCM->getItem(item, ItemSystem::nothrow) != nullptr;
+	};
+
+	for (OBJECTTYPE& o : sc.Inv)
+	{
+		if (o.usItem == NOTHING) continue;
+
+		UINT16 const original = o.usItem;
+		if (!replace(o.usItem))
+		{
+			SLOGW("Dropping unknown or removed item #{} from a map-placed soldier", original);
+			DeleteObj(&o);
+			continue;
+		}
+
+		for (UINT16& attachment : o.usAttachItem)
+		{
+			if (attachment == NOTHING) continue;
+			UINT16 const originalAttachment = attachment;
+			if (!replace(attachment))
+			{
+				SLOGW("Dropping unknown or removed attachment #{} from a map-placed soldier", originalAttachment);
+				attachment = NOTHING;
+			}
+		}
+	}
+}
+
 void LoadSoldiersFromMap(HWFILE const f, bool stracLinuxFormat)
 {
 	UINT8 const n_individuals = gMapInformation.ubNumIndividuals;
@@ -212,6 +258,7 @@ void LoadSoldiersFromMap(HWFILE const f, bool stracLinuxFormat)
 			// node as the basic placement.
 			SOLDIERCREATE_STRUCT* const sc = new SOLDIERCREATE_STRUCT{};
 			ExtractSoldierCreateFromFile(f, sc, stracLinuxFormat);
+			SanitizeMapPlacedInventory(*sc);
 
 			if (sc->ubProfile != NO_PROFILE)
 			{
