@@ -11,6 +11,7 @@
 #include <SDL3/SDL_scancode.h>
 #include <string_theory/string>
 
+#include <algorithm>
 #include <bitset>
 
 #define BUTTON_REPEAT_TIMEOUT		250
@@ -262,17 +263,37 @@ right_button:
 	}
 }
 
+// Each axis is stored as a signed 8.8 fixed point number, the horizontal one
+// in the upper 16 bits.
+static UINT16 PackWheelAxis(float const v)
+{
+	float const scaled = std::clamp(v * 256.0f, -32768.0f, 32767.0f);
+	return static_cast<UINT16>(static_cast<INT16>(scaled));
+}
+
+UINT32 PackWheelDelta(float const x, float const y)
+{
+	return UINT32(PackWheelAxis(x)) << 16 | PackWheelAxis(y);
+}
+
+void UnpackWheelDelta(UINT32 const param, float* const x, float* const y)
+{
+	*x = static_cast<INT16>(param >> 16)    / 256.0f;
+	*y = static_cast<INT16>(param & 0xFFFF) / 256.0f;
+}
+
 void MouseWheelScroll(const SDL_MouseWheelEvent* WheelEv)
 {
 	gfIsUsingTouch = false;
 
+	UINT32 const delta = PackWheelDelta(WheelEv->x, WheelEv->y);
 	if (WheelEv->y > 0)
 	{
-		QueuePointerEvent(MOUSE_WHEEL_UP, 0);
+		QueuePointerEvent(MOUSE_WHEEL_UP, delta);
 	}
 	else
 	{
-		QueuePointerEvent(MOUSE_WHEEL_DOWN, 0);
+		QueuePointerEvent(MOUSE_WHEEL_DOWN, delta);
 	}
 }
 

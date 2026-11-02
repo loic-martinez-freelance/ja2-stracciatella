@@ -61,6 +61,10 @@ ENUM_BITSET(RenderLayerFlags)
 extern INT16 gsScrollXOffset;
 extern INT16 gsScrollYOffset;
 
+// Pans the view by the given amount of screen pixels, positive to the right
+// and down, the way a mouse wheel or a trackpad swipe does
+void PanWorldByWheel(float dx, float dy);
+
 // Flags to indicate whether we have scrolled fully into a direction
 extern BOOLEAN gfScrolledToLeft;
 extern BOOLEAN gfScrolledToRight;

@@ -7,6 +7,7 @@ DefaultGamePolicy::DefaultGamePolicy(const JsonValue& json)
 	extra_hotkeys = gp.getOptionalBool("extra_hotkeys", true);
 	can_enter_turnbased = gp.getOptionalBool("can_enter_turnbased");
 	extra_mousewheel_actions = gp.getOptionalBool("extra_mousewheel_actions", true);
+	tactical_wheel_pan_speed = gp.getOptionalDouble("tactical_wheel_pan_speed", 1.0);
 
 	f_draw_item_shadow = gp.getOptionalBool("draw_item_shadow", true);
 	target_fps = gp.getOptionalInt("target_fps", 40);

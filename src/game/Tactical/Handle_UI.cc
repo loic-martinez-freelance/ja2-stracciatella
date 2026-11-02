@@ -80,6 +80,7 @@
 #include <string_theory/string>
 
 #include <algorithm>
+#include <cmath>
 #include <iterator>
 
 #define MAX_ON_DUTY_SOLDIERS 6
@@ -653,7 +654,50 @@ void TacticalViewPortMovementCallback(MOUSE_REGION* region, UINT32 reason) {
 	}
 }
 
+// Screen pixels panned per wheel notch. Trackpads on macOS report their
+// precise movement in tenths of a point instead, so they get a smaller unit
+// to keep the map under the fingers.
+#define WHEEL_NOTCH_PAN_PIXELS   40.0f
+#ifdef __APPLE__
+#define WHEEL_PRECISE_PAN_PIXELS 10.0f
+#else
+#define WHEEL_PRECISE_PAN_PIXELS WHEEL_NOTCH_PAN_PIXELS
+#endif
+
+// Pans the map for a wheel event over the viewport, unless the wheel is busy
+// with something else. Returns whether it did.
+static bool HandleViewportWheelPan()
+{
+	double const speed = gamepolicy(tactical_wheel_pan_speed);
+	if (speed <= 0) return false;
+	if (gCurrentUIMode == LOCKUI_MODE || gCurrentUIMode == PAN_MODE) return false;
+	// The wheel raises and lowers the aim level on a confirmed target
+	if (gamepolicy(extra_mousewheel_actions) && gCurrentUIMode == CONFIRM_ACTION_MODE &&
+		gTacticalStatus.uiFlags & INCOMBAT)
+	{
+		return false;
+	}
+
+	float x;
+	float y;
+	MSYS_GetWheelDelta(&x, &y);
+	if (x == 0 && y == 0) return true;
+
+	// A classic wheel moves in whole notches along one axis only
+	bool  const notch = x == 0 && y == std::trunc(y);
+	float const unit  = (notch ? WHEEL_NOTCH_PAN_PIXELS : WHEEL_PRECISE_PAN_PIXELS) * static_cast<float>(speed);
+	// Scrolling up shows what is above, so the view moves up
+	PanWorldByWheel(x * unit, -y * unit);
+	return true;
+}
+
 void TacticalViewPortTouchCallback(MOUSE_REGION* region, UINT32 reason) {
+	if (reason & (MSYS_CALLBACK_REASON_WHEEL_UP | MSYS_CALLBACK_REASON_WHEEL_DOWN) &&
+		HandleViewportWheelPan())
+	{
+		return;
+	}
+
 	UpdateCurrentCursorTarget();
 
 	if (!(gTacticalStatus.uiFlags & INCOMBAT))

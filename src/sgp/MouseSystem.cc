@@ -127,6 +127,7 @@ INT16 MSYS_CurrentMX=0;
 INT16 MSYS_CurrentMY=0;
 static INT16 MSYS_CurrentButtons = 0;
 static UINT32 MSYS_Action         = 0;
+static UINT32 MSYS_WheelDelta     = 0;
 
 static MOUSE_REGION* g_clicked_region;
 
@@ -246,9 +247,11 @@ void MouseSystemHook(UINT16 type, UINT32 button, UINT16 x, UINT16 y)
 
 		case MOUSE_WHEEL_UP:
 			action |= MSYS_DO_WHEEL_UP;
+			MSYS_WheelDelta = button;
 			break;
 		case MOUSE_WHEEL_DOWN:
 			action |= MSYS_DO_WHEEL_DOWN;
+			MSYS_WheelDelta = button;
 			break;
 
 		case TOUCH_FINGER_UP:
@@ -283,6 +286,12 @@ void MouseSystemHook(UINT16 type, UINT32 button, UINT16 x, UINT16 y)
 
 	MSYS_Action = action;
 	if (action != MSYS_NO_ACTION) MSYS_UpdateMouseRegion();
+}
+
+
+void MSYS_GetWheelDelta(float* const x, float* const y)
+{
+	UnpackWheelDelta(MSYS_WheelDelta, x, y);
 }
 
 

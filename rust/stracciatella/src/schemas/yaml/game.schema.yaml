@@ -33,6 +33,18 @@ properties:
       is confirmed on a target. Right clicking to add aim clicks still works.
 
       Vanilla setting: `false`
+  tactical_wheel_pan_speed:
+    type: number
+    minimum: 0
+    maximum: 10
+    title: Tactical wheel pan speed
+    description: |
+      Scrolling the mouse wheel or swiping with two fingers on a trackpad over the tactical map pans it,
+      horizontally too when the device supports it. Higher values pan faster, 0 turns it off. While the
+      attack cursor is confirmed on a target with extra_mousewheel_actions on, the wheel keeps changing the
+      aim level instead.
+
+      Vanilla setting: `0`
   draw_item_shadow:
     type: boolean
     title: Draw item shadow
@@ -581,6 +593,7 @@ required:
   - extra_hotkeys
   - can_enter_turnbased
   - extra_mousewheel_actions
+  - tactical_wheel_pan_speed
   - draw_item_shadow
   - starting_cash_easy
   - starting_cash_medium

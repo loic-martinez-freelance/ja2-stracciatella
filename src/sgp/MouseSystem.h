@@ -244,6 +244,11 @@ void RenderFastHelp(void);
 // Hook to the SGP's mouse handler
 void MouseSystemHook(UINT16 type, UINT32 button, UINT16 x, UINT16 y);
 
+// How far the wheel or trackpad scrolled for the wheel event being handled,
+// in wheel notches, positive to the right and away from the user. Only
+// meaningful in a MSYS_CALLBACK_REASON_WHEEL_UP or _DOWN callback.
+void MSYS_GetWheelDelta(float* x, float* y);
+
 class MouseRegion : private MOUSE_REGION
 {
 	public:

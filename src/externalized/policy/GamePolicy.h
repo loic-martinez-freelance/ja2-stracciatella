@@ -54,6 +54,7 @@ public:
 	bool skip_sleep_explanation;          // skip annoying popups
 
 	bool extra_mousewheel_actions;        // Extra tactical mouse wheel bindings: look cursor on wheel click, aim level on wheel scroll
+	double tactical_wheel_pan_speed;      // How fast the mouse wheel and two finger trackpad swipes pan the tactical map, 0 turns it off
 	bool can_enter_turnbased;             // 'd' can start turnbased if in real-time
 
 	bool ai_better_aiming_choice;         // decide where to shoot depending on to-hit probability if random choice is being made

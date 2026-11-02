@@ -28,6 +28,7 @@
 #include "Sys_Globals.h"
 #include "TileDef.h"
 #include "Tile_Cache.h"
+#include "Timer.h"
 #include "Timer_Control.h"
 #include "UILayout.h"
 #include "Video.h"
@@ -112,6 +113,13 @@ enum ZLevels : INT16
 #define MIN_SCROLL_OFFSET_X 20
 #define MIN_SCROLL_OFFSET_Y 20
 
+// Wheel panning never queues up more than this, so pushing against a map edge
+// does not build up a backlog that has to be scrolled off again first.
+#define MAX_WHEEL_PAN_OFFSET_X (MIN_SCROLL_OFFSET_X * 8)
+#define MAX_WHEEL_PAN_OFFSET_Y (MIN_SCROLL_OFFSET_Y * 8)
+// After this many milliseconds without wheel input the pan gesture is over.
+#define WHEEL_PAN_END_DELAY 250
+
 static UINT16 us16BPPItemCycleWhiteColors[NUM_ITEM_CYCLE_COLORS];
 static UINT16 us16BPPItemCycleRedColors[NUM_ITEM_CYCLE_COLORS];
 static UINT16 us16BPPItemCycleYellowColors[NUM_ITEM_CYCLE_COLORS];
@@ -184,6 +192,12 @@ static INT16 gsLEndYS;
 
 INT16 gsScrollXOffset = 0;
 INT16 gsScrollYOffset = 0;
+
+static bool   g_wheel_pan_active = false;
+static UINT32 g_wheel_pan_time;
+static float  g_wheel_pan_rest_x = 0; // Sub pixel leftovers of the wheel pan
+static float  g_wheel_pan_rest_y = 0;
+
 INT16 gsScrollXIncrement;
 INT16 gsScrollYIncrement;
 
@@ -1955,6 +1969,20 @@ void ScrollWorld(void)
 
 	if (_KeyDown(ALT)) return;
 
+	if (g_wheel_pan_active && GetClock() - g_wheel_pan_time > WHEEL_PAN_END_DELAY)
+	{
+		// Drop what is left of the wheel pan, otherwise scrolling by moving the
+		// mouse to the screen edge stays disabled
+		g_wheel_pan_active = false;
+		g_wheel_pan_rest_x = 0;
+		g_wheel_pan_rest_y = 0;
+		if (gCurrentUIMode != PAN_MODE)
+		{
+			gsScrollXOffset = 0;
+			gsScrollYOffset = 0;
+		}
+	}
+
 	UINT32 ScrollFlags = 0;
 	BOOLEAN fIsScrollingByOffset = gsScrollXOffset != 0 || gsScrollYOffset != 0;
 
@@ -2120,6 +2148,28 @@ void ScrollWorld(void)
 		g_scroll_inertia = false;
 		gfScrollPending  = FALSE;
 	}
+}
+
+
+void PanWorldByWheel(float const dx, float const dy)
+{
+	// The pan mode drag owns the scroll offset while it is active
+	if (gCurrentUIMode == PAN_MODE) return;
+
+	// The scroll offset follows a dragged map, so it is positive when the view
+	// moves left or up
+	float const x = g_wheel_pan_rest_x - dx;
+	float const y = g_wheel_pan_rest_y - dy;
+	INT16 const ix = static_cast<INT16>(x);
+	INT16 const iy = static_cast<INT16>(y);
+	g_wheel_pan_rest_x = x - ix;
+	g_wheel_pan_rest_y = y - iy;
+
+	gsScrollXOffset = std::clamp<INT16>(gsScrollXOffset + ix, -MAX_WHEEL_PAN_OFFSET_X, MAX_WHEEL_PAN_OFFSET_X);
+	gsScrollYOffset = std::clamp<INT16>(gsScrollYOffset + iy, -MAX_WHEEL_PAN_OFFSET_Y, MAX_WHEEL_PAN_OFFSET_Y);
+
+	g_wheel_pan_active = true;
+	g_wheel_pan_time   = GetClock();
 }
 
 

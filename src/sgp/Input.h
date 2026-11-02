@@ -50,6 +50,12 @@ void MouseButtonDown(const SDL_MouseButtonEvent*);
 void MouseButtonUp(const SDL_MouseButtonEvent*);
 void MouseWheelScroll(const SDL_MouseWheelEvent*);
 
+// Mouse wheel events carry how far the wheel or trackpad scrolled in their
+// parameter, positive to the right and away from the user. Trackpads and
+// smooth scrolling wheels report fractions of a wheel notch.
+UINT32 PackWheelDelta(float x, float y);
+void   UnpackWheelDelta(UINT32 param, float* x, float* y);
+
 void KeyDown(const SDL_KeyboardEvent*);
 void KeyUp(  const SDL_KeyboardEvent*);
 void TextInput(  const SDL_TextInputEvent*);
