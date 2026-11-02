@@ -1,4 +1,7 @@
 #include "Button_System.h"
+#include "ContentManager.h"
+#include "GameInstance.h"
+#include "Logger.h"
 #include "Cursor_Control.h"
 #include "Cursors.h"
 #include "Directories.h"
@@ -58,6 +61,10 @@ static GUIButtonRef iMenuButtons[NUM_MENU_ITEMS];
 namespace {
 cache_key_t const guiMainMenuBackGroundImage{ LOADSCREENSDIR "/mainmenubackground.sti" };
 cache_key_t const guiJa2LogoImage{ LOADSCREENSDIR "/ja2logo.sti" };
+
+char const WIDE_BACKGROUND_FILE[] = "sti/loadscreens/mainmenubackground-wide.sti";
+SGPVSurface* guiWideBackground = nullptr;
+bool gfWideBackgroundTried = false;
 }
 
 static INT8    gbHandledMainMenu = 0;
@@ -252,6 +259,12 @@ static void ExitMainMenu(void)
 	CreateDestroyMainMenuButtons(FALSE);
 	RemoveVObject(guiMainMenuBackGroundImage);
 	RemoveVObject(guiJa2LogoImage);
+	if (guiWideBackground)
+	{
+		DeleteVideoSurface(guiWideBackground);
+		guiWideBackground = nullptr;
+	}
+	gfWideBackgroundTried = false;
 	gMsgBox.uiExitScreen = MAINMENU_SCREEN;
 }
 
@@ -368,6 +381,33 @@ static void CreateDestroyMainMenuButtons(BOOLEAN fCreate)
 }
 
 
+/* The 1024x768 Wildfire menu background extended to 16:9 with new artwork at
+ * the sides, if available. Loaded on first use, freed on leaving the menu. */
+static SGPVSurface* GetWideMenuBackground(ETRLEObject const& bg)
+{
+	if (gfWideBackgroundTried) return guiWideBackground;
+	gfWideBackgroundTried = true;
+	if (bg.usWidth != 1024 || bg.usHeight != 768 || !GCM->doesGameResExists(WIDE_BACKGROUND_FILE)) return nullptr;
+
+	try
+	{
+		guiWideBackground = AddVideoSurfaceFromFile(WIDE_BACKGROUND_FILE);
+	}
+	catch (std::exception const& e)
+	{
+		SLOGW("Could not load {}: {}", WIDE_BACKGROUND_FILE, e.what());
+		return nullptr;
+	}
+	if (guiWideBackground->BPP() != 16 || guiWideBackground->Height() != bg.usHeight || guiWideBackground->Width() < bg.usWidth)
+	{
+		SLOGW("Ignoring {}: expected a 16 bpp image {} pixels high and at least {} wide", WIDE_BACKGROUND_FILE, bg.usHeight, bg.usWidth);
+		DeleteVideoSurface(guiWideBackground);
+		guiWideBackground = nullptr;
+	}
+	return guiWideBackground;
+}
+
+
 static void RenderMainMenu(void)
 {
 	SGPVObject const* const background = GetVObject(guiMainMenuBackGroundImage);
@@ -382,20 +422,44 @@ static void RenderMainMenu(void)
 	// High resolution artwork (Wildfire ships a 1024x768 background and a
 	// logo as wide as it). Compose the menu at its native size, then fit it
 	// to the screen instead of cropping it.
-	SGPVSurface composed(bg.usWidth, bg.usHeight, 16);
+	SGPBox box = FitImageToScreen(bg.usWidth, bg.usHeight, std::max<UINT16>(640, std::min(SCREEN_WIDTH, bg.usWidth)), std::max<UINT16>(480, std::min(SCREEN_HEIGHT, bg.usHeight)));
+
+	// Wildfire's background extended to 16:9 with new artwork at the sides:
+	// show as much of it as fits next to the original artwork.
+	SGPVSurface* const wide = GetWideMenuBackground(bg);
+	UINT16 w = bg.usWidth;
+	UINT16 crop_x = 0;
+	if (wide)
+	{
+		UINT32 const fits = UINT32(SCREEN_WIDTH) * bg.usHeight / box.h;
+		w      = UINT16(std::clamp<UINT32>(fits, bg.usWidth, wide->Width()));
+		crop_x = (wide->Width() - w) / 2;
+		UINT16 const box_w = UINT16(UINT32(w) * box.h / bg.usHeight);
+		box.x = (SCREEN_WIDTH - box_w) / 2;
+		box.w = box_w;
+	}
+
+	SGPVSurface composed(w, bg.usHeight, 16);
 	composed.Fill(0);
 	SGPRect clip;
-	clip.set(0, 0, bg.usWidth, bg.usHeight);
+	clip.set(0, 0, w, bg.usHeight);
 	SGPRect const old_clip = SetClippingRect(clip);
-	BltVideoObject(&composed, background, 0, -bg.sOffsetX, -bg.sOffsetY);
+	if (wide)
+	{
+		SGPBox const src{ crop_x, 0, w, bg.usHeight };
+		BltVideoSurface(&composed, wide, 0, 0, &src);
+	}
+	else
+	{
+		BltVideoObject(&composed, background, 0, -bg.sOffsetX, -bg.sOffsetY);
+	}
 	SGPVObject const* const logo = GetVObject(guiJa2LogoImage);
 	ETRLEObject const& lg = logo->SubregionProperties(0);
-	BltVideoObject(&composed, logo, 0, (bg.usWidth - lg.usWidth) / 2 - lg.sOffsetX, -lg.sOffsetY);
+	BltVideoObject(&composed, logo, 0, (w - lg.usWidth) / 2 - lg.sOffsetX, -lg.sOffsetY);
 	SetClippingRect(old_clip);
 
-	SGPBox const box = FitImageToScreen(bg.usWidth, bg.usHeight, std::max<UINT16>(640, std::min(SCREEN_WIDTH, bg.usWidth)), std::max<UINT16>(480, std::min(SCREEN_HEIGHT, bg.usHeight)));
 	BltVideoSurfaceSmoothScaled(FRAME_BUFFER, &composed, box);
-	// cover the margins of a widescreen display
+	// cover what remains of the margins of a widescreen display
 	FillSideMarginsWithMirroredImage(FRAME_BUFFER, box);
 }
 
