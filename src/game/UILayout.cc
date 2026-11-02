@@ -12,6 +12,7 @@
 #include "ScreenIDs.h"
 #include "Soldier_Control.h"
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <string_theory/string>
 
@@ -53,7 +54,7 @@ bool UILayout::isBigScreen() const
 }
 
 
-void UILayout::detectMapScreenLayout()
+void UILayout::detectMapScreenLayout(float displayAspectRatio)
 {
 	// The original map border is 379 pixels wide, Wildfire's is 763.
 	try
@@ -80,7 +81,23 @@ void UILayout::detectMapScreenLayout()
 	if (!m_wildfireMapScreen && !m_wildfireTacticalPanels) return;
 
 	SLOGI("Using the Wildfire 1024x768 map screen layout");
-	if (m_screenWidth < WILDFIRE_INTERFACE_WIDTH || m_screenHeight < WILDFIRE_INTERFACE_HEIGHT)
+	if (m_screenWidth < WILDFIRE_INTERFACE_WIDTH && m_screenHeight < WILDFIRE_INTERFACE_HEIGHT)
+	{
+		// The configured resolution (usually the 640x480 default) is too small
+		// in both directions, so it gets replaced. Use a height of 768 and
+		// follow the display's aspect ratio for the width, so that the game
+		// fills a widescreen display instead of being pillarboxed.
+		UINT16 width = WILDFIRE_INTERFACE_WIDTH;
+		if (displayAspectRatio > 0.0f)
+		{
+			// round to an even number of pixels
+			int const w = int(std::lround(WILDFIRE_INTERFACE_HEIGHT * displayAspectRatio / 2)) * 2;
+			width = UINT16(std::clamp(w, WILDFIRE_INTERFACE_WIDTH, 4 * WILDFIRE_INTERFACE_WIDTH));
+		}
+		SLOGI("Using a resolution of {}x{} for the Wildfire layout", width, WILDFIRE_INTERFACE_HEIGHT);
+		setScreenSize(width, WILDFIRE_INTERFACE_HEIGHT);
+	}
+	else if (m_screenWidth < WILDFIRE_INTERFACE_WIDTH || m_screenHeight < WILDFIRE_INTERFACE_HEIGHT)
 	{
 		SLOGI("Increasing the resolution to at least {}x{} for the Wildfire map screen", WILDFIRE_INTERFACE_WIDTH, WILDFIRE_INTERFACE_HEIGHT);
 		setScreenSize(std::max<UINT16>(m_screenWidth, WILDFIRE_INTERFACE_WIDTH), std::max<UINT16>(m_screenHeight, WILDFIRE_INTERFACE_HEIGHT));

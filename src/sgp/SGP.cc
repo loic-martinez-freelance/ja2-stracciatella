@@ -418,7 +418,12 @@ int main(int argc, char* argv[])
 
 		GCM = cm;
 
-		g_ui.detectMapScreenLayout();
+		float displayAspectRatio = 0.0f;
+		if (SDL_DisplayMode const * const mode = SDL_GetDesktopDisplayMode(SDL_GetPrimaryDisplay()))
+		{
+			if (mode->w > 0 && mode->h > 0) displayAspectRatio = float(mode->w) / float(mode->h);
+		}
+		g_ui.detectMapScreenLayout(displayAspectRatio);
 		g_ui.recalculatePositions();
 
 		SLOGD("Initializing Video Manager");

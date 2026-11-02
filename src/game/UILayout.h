@@ -157,8 +157,11 @@ public:
 
 	/** Detect the Wildfire 1024x768 map screen from the game data. Enlarges
 	 * the screen to at least 1024x768 if needed. Must be called after the
-	 * game data has been loaded and before recalculatePositions(). */
-	void detectMapScreenLayout();
+	 * game data has been loaded and before recalculatePositions().
+	 * When the configured resolution is smaller than 1024x768 in both
+	 * directions, it is replaced by one 768 pixels high whose width follows
+	 * displayAspectRatio (width / height of the display, 0 if unknown). */
+	void detectMapScreenLayout(float displayAspectRatio);
 
 	UINT16 currentHeight() const;
 	UINT16 get_CLOCK_X() const;
