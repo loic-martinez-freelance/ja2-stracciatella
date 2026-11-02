@@ -1356,6 +1356,64 @@ static void SelectAllMercsInSector()
 }
 
 
+// Same criteria as NumCapableEnemyInSector(): these are the soldiers that keep
+// the battle (and sector liberation) from ending.
+static bool IsRemainingEnemy(SOLDIERTYPE const& s)
+{
+	if (!s.bInSector)                   return false;
+	if (s.uiStatusFlags & SOLDIER_DEAD) return false;
+	if (s.bLife < OKLIFE && s.bLife != 0) return false;
+	if (s.bNeutral)                     return false;
+	if (s.bSide == Side::FRIENDLY)      return false;
+	return true;
+}
+
+
+// Center the view on the next remaining enemy in the sector and flash a
+// locator on its tile, even if no merc can currently see it. Pressing the key
+// again cycles through the remaining enemies.
+static void LocateNextRemainingEnemy()
+{
+	static SoldierID last_id = NOBODY;
+
+	UINT8        n_enemies = 0;
+	UINT8        index     = 0;
+	SOLDIERTYPE* first     = NULL;
+	SOLDIERTYPE* next      = NULL;
+	FOR_EACH_SOLDIER(i)
+	{
+		SOLDIERTYPE& s = *i;
+		if (!IsRemainingEnemy(s)) continue;
+		++n_enemies;
+		if (!first) first = &s;
+		if (!next && (last_id == NOBODY || s.ubID > last_id))
+		{
+			next  = &s;
+			index = n_enemies;
+		}
+	}
+
+	if (!first)
+	{
+		last_id = NOBODY;
+		ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, "No enemies left in sector.");
+		return;
+	}
+	if (!next)
+	{ // Wrap around
+		next  = first;
+		index = 1;
+	}
+	last_id = next->ubID;
+
+	InternalLocateGridNo(next->sGridNo, TRUE);
+	BeginMultiPurposeLocator(next->sGridNo, next->bLevel);
+	ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE,
+		ST::format("Enemy {} of {} located{}.", index, n_enemies,
+			next->bLevel ? " (on a roof)" : ""));
+}
+
+
 static void HandleModNone(UINT32 const key, UIEventKind* const new_event)
 {
 	switch (key)
@@ -1792,6 +1850,10 @@ static void HandleModCtrl(UINT32 const key, UIEventKind* const new_event)
 		if(GameMode::getInstance()->isEditorMode())
 		{
 			ToggleMapEdgepoints();
+		}
+		else
+		{
+			LocateNextRemainingEnemy();
 		}
 		break;
 
