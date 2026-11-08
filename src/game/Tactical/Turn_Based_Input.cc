@@ -47,6 +47,7 @@
 #include "Auto_Bandage.h"
 #include "Options_Screen.h"
 #include "Squads.h"
+#include "Interface_Control.h"
 #include "Interface_Panels.h"
 #include "Soldier_Tile.h"
 #include "Soldier_Functions.h"
@@ -2374,6 +2375,11 @@ void GetKeyboardInput(UIEventKind* const puiNewEvent)
 			else if( InKeyRingPopup( ) )
 			{
 				DeleteKeyRingPopup( );
+			}
+			else if (gsCurInterfacePanel == SM_PANEL && gpItemPointer == NULL)
+			{
+				// Close the merc inventory panel, back to the team panel
+				SetNewPanel(0);
 			}
 
 			if ( gCurrentUIMode == MENU_MODE )
